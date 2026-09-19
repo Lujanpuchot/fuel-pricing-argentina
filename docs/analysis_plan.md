@@ -1,6 +1,6 @@
 # Analysis plan: choices fixed before estimation
 
-Luján Puchot. First version: 18 September 2026.
+María Luján Puchot. First version: 18 September 2026.
 
 This document records the choices fixed before estimating the structural model described in [`research_proposal.md`](research_proposal.md). It is not a registered pre-analysis plan for an experiment. The data are observational and I have already worked with them: the station panel has been cleaned, geocoded and merged with market covariates, and the descriptive and event-study analysis has been run. The demand and supply estimation has not been run, so no price coefficient, markup or value of $\lambda$ exists yet. The plan is a dated record, written to limit specification search in the remaining steps.
 

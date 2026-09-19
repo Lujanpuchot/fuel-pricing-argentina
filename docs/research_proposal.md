@@ -1,6 +1,6 @@
 # State ownership and retail fuel pricing in Argentina: research proposal
 
-Luján Puchot. Master's thesis in Economics, Universidad de San Andrés. Work in progress.
+María Luján Puchot. Master's thesis in Economics, Universidad de San Andrés. Work in progress.
 
 ## Research question
 

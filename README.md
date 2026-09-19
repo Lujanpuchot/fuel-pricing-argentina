@@ -1,6 +1,6 @@
 # Retail fuel pricing in Argentina
 
-Code for my master's thesis in Economics at Universidad de San Andrés. Work in progress.
+Code for my M.A. thesis in Economics at Universidad de San Andrés, *When the State Competes: Ownership, Market Power, and Market Failure in Argentina's Retail Gasoline Market* (advisor: M. Florencia Gabrielli). Work in progress.
 
 YPF is the largest fuel retailer in Argentina. It was renationalized in 2012, and governments of different signs have leaned on it to hold pump prices down. The thesis asks how far YPF's prices depart from profit maximization, under which administrations, what that cost the firm in forgone margin, and how much of it reached consumers. I estimate a random-coefficients logit demand for gasoline and diesel and a supply side in which YPF maximizes profit plus a weight λ on consumer surplus, and I compare YPF with private brands that face the same costs in the same markets.
 
@@ -90,4 +90,4 @@ Variable names follow the source data and are in Spanish. Comments are in Englis
 
 The panel, the geocoding, the covariates and the descriptive analysis are complete. Demand and supply estimation is in progress and its code will be added as it stabilizes.
 
-Luján Puchot, Universidad de San Andrés
+María Luján Puchot, Universidad de San Andrés
