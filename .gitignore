@@ -1,0 +1,15 @@
+# R
+.Rhistory
+.RData
+.Rproj.user/
+.Ruserdata
+
+# data and generated files are kept outside the repository
+*.rds
+*.RData
+*.xlsx
+*.zip
+*.gz
+
+# local working copies
+_original/
