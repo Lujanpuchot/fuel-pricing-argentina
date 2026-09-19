@@ -80,7 +80,7 @@ One stretch of the volume cleaning had been lost and was rewritten from the save
 
 ## Running the code
 
-The scripts were written in R 4.5 and use `data.table`, `fs`, `dplyr`, `readr`, `readxl`, `openxlsx`, `ggplot2`, `scales`, `knitr`, `sf`, `rnaturalearth`, `jsonlite`, `httr` and `pdftools`.
+The scripts were written in R 4.5 and use `data.table`, `fs`, `readxl`, `openxlsx`, `ggplot2`, `scales`, `knitr`, `sf`, `rnaturalearth`, `jsonlite`, `httr` and `pdftools`.
 
 Set `FUEL_DATA_ROOT` to the folder that holds the data tree (for example in `~/.Renviron`) and run the scripts from the repository root, in the order of the folders. The geocoding scripts are slow because Nominatim allows one request per second. Set `FUEL_CONTACT_EMAIL` so that those requests identify you, as its usage policy asks.
 
