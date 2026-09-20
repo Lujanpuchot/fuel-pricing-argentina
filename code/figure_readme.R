@@ -83,42 +83,44 @@ en <- function(x) factor(fifelse(x == "Gas Oil Grado 2", "Diesel (grade 2)", "Re
 ts[, prod_en := en(producto)]
 seg[, prod_en := en(producto)]
 
-shade <- data.table(x0 = CUTS[-length(CUTS)], x1 = CUTS[-1])[c(2, 4, 6)]
-tags  <- data.table(x = CUTS[-length(CUTS)] + diff(CUTS)/2, y = 0.058, lab = LABS,
-                    prod_en = factor("Regular gasoline",
-                                     levels = c("Regular gasoline", "Diesel (grade 2)")))
+divs <- data.table(x = CUTS[c(-1, -length(CUTS))])
+tags <- data.table(x = CUTS[-length(CUTS)] + diff(CUTS)/2, y = 0.045, lab = LABS,
+                   prod_en = factor("Regular gasoline",
+                                    levels = c("Regular gasoline", "Diesel (grade 2)")))
 
 g1 <- ggplot() +
-  geom_rect(data = shade, aes(xmin = x0, xmax = x1, ymin = -Inf, ymax = Inf),
-            fill = "grey92", alpha = .6) +
-  geom_hline(yintercept = 0, color = "grey40", linewidth = .35) +
-  geom_line(data = ts, aes(periodo_dt, gap), color = "grey58", linewidth = .35) +
+  geom_vline(data = divs, aes(xintercept = x), color = "grey86", linewidth = .35) +
+  geom_hline(yintercept = 0, color = "grey55", linewidth = .35) +
+  geom_line(data = ts, aes(periodo_dt, gap), color = "grey72", linewidth = .3) +
   geom_rect(data = seg, aes(xmin = x0, xmax = x1, ymin = lo, ymax = hi),
-            fill = "#1F3864", alpha = .25) +
+            fill = "#1F3864", alpha = .18) +
   geom_segment(data = seg, aes(x = x0, xend = x1, y = est, yend = est),
-               color = "#1F3864", linewidth = 1) +
-  geom_text(data = tags, aes(x, y, label = lab), size = 2.5, color = "grey30",
+               color = "#1F3864", linewidth = 1.1) +
+  geom_text(data = tags, aes(x, y, label = lab), size = 2.5, color = "grey45",
             vjust = 1, lineheight = .9) +
   facet_wrap(~prod_en, ncol = 1) +
   scale_y_continuous(labels = percent_format(accuracy = 1)) +
   scale_x_date(date_breaks = "3 years", date_labels = "%Y",
                limits = c(CUTS[1], CUTS[length(CUTS)]), expand = c(0.005, 0)) +
-  coord_cartesian(ylim = c(-0.145, 0.065)) +
+  coord_cartesian(ylim = c(-0.115, 0.05)) +
   labs(title = "The gap is there under both owners, and closes in the years prices were free",
-       subtitle = paste0("Price of YPF against the large private brands, within the same locality and month; ",
-                         "negative means YPF is cheaper.\nGrey: median across localities, by month. ",
-                         "Blue: mean of each government, with an interval from the spread of\nlocality means. ",
-                         "Pre-tax price. Gaps beyond 40% are dropped as gross errors."),
-       x = NULL, y = "Gap against the large private brands") +
+       subtitle = paste0("Price of YPF against the large private brands, compared within the same ",
+                         "locality and month. Negative means YPF is cheaper.\n",
+                         "Thick line: the mean of each government. Faint line: the median across ",
+                         "localities, month by month. Pre-tax price."),
+       x = NULL, y = NULL) +
   theme_minimal(base_size = 11) +
   theme(plot.title = element_text(face = "bold", size = 13),
-        plot.subtitle = element_text(color = "grey30", size = 9, lineheight = 1.2),
+        plot.subtitle = element_text(color = "grey35", size = 9, lineheight = 1.25),
         plot.title.position = "plot",
+        panel.grid.major.x = element_blank(),
         panel.grid.minor = element_blank(),
-        strip.text = element_text(face = "bold", hjust = 0))
+        panel.grid.major.y = element_line(color = "grey93"),
+        strip.text = element_text(face = "bold", hjust = 0, size = 10),
+        axis.text = element_text(color = "grey40"))
 
 ggsave(file.path(DIR_FIG, "ypf_private_gap_by_government.png"), g1,
-       width = 9.6, height = 6.6, dpi = 200)
+       width = 9.4, height = 5.8, dpi = 200)
 cat("saved:", file.path(DIR_FIG, "ypf_private_gap_by_government.png"), "\n")
 
 # Figure 2: the pump price against crude ----
