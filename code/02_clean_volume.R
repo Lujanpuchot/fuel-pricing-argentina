@@ -307,6 +307,10 @@ eess_all <- vol_cutoffs_prod[eess_all, on = "producto"]
 eess_all[, flag_outlier_p999 := !is.na(volumen_num) & volumen_num > p999]
 eess_all[, flag_outlier_p9999 := !is.na(volumen_num) & volumen_num > p9999]
 
+# The two flags above and this one are diagnostic: they are printed and never
+# applied. The ratio is deliberately loose, 1,000 times the group median, so
+# that the printouts show candidates rather than only the worst cases. The
+# rule that does remove volume, in section 8, asks for 5,000.
 eess_all[, flag_outlier_ratio := !is.na(volumen_num) & !is.na(mediana) & mediana > 0 &
            volumen_num > 1000 * mediana]
 
@@ -956,6 +960,10 @@ eess_all[, flag_no_mayorista := !grepl(
 # diesel and gasoline, 1e5 for kerosene, biodiesel and GLPA. Nothing below the
 # floor is ever flagged, however far it sits from its group's percentile or
 # median, which is what keeps the ratio rules off ordinary large outlets.
+# The floor does the work. An outlet-month of 1e6 cubic metres is a thousand
+# times the largest plausible retail month, so nothing legitimate reaches it;
+# a busy station sells tens to a few hundred cubic metres. Kerosene, biodiesel
+# and GLPA sell in much smaller volumes, hence the lower floor.
 eess_all[, piso_abs_liq := fifelse(
   producto %in% liq_gas_nafta, 1e6,
   fifelse(producto %in% liq_otros, 1e5, NA_real_)
@@ -1285,10 +1293,18 @@ setDT(eess_all_cleaned1)
 saveRDS(eess_all_cleaned1,
         fs::path(DIR_DATASETS, "eess_all_cleaned2.rds"), compress = "gzip")
 
+# What the rules of sections 7 and 8 amount to: 229 volumes nulled out of
+# 5,346,549 rows. They are narrow by design, and a tail of large retail
+# volumes survives them; see the note on the 1e-3 cut below and the volume
+# section of the README.
 eess_all_cleaned2_cut <- eess_all_cleaned1[!is.na(volumen_num_final)]
 saveRDS(eess_all_cleaned2_cut,
         fs::path(DIR_DATASETS, "eess_all_cleaned2_cut.rds"), compress = "gzip")
 
+# One litre a month. Below that an outlet cannot be selling: the rows are
+# zeros and near-zeros that stand for a month with no activity. This drops
+# 57,157 rows, and with them every zero, so from here on a month with no sales
+# and a month with no record look the same.
 eess_all_cleaned3_cut <- eess_all_cleaned2_cut[volumen_num_final >= 1e-3]
 eess_all_cleaned3_cut[, volumen := volumen_num_final]
 eess_all_cleaned3_cut[, c("volumen_num", "volumen_num_final") := NULL]

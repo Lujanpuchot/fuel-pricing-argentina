@@ -98,8 +98,15 @@ cat("(A) distance to refinery saved to", basename(OUT_E), "|",
 
 # 1.3 (B) Outlet x year panel: nearby rivals ----
 b <- readRDS(BASE); setDT(b)
-act <- unique(b[canal_de_comercializacion == "Al público",
-                .(nro_inscripcion, anio = as.integer(anio), bandera, departamento, provincia)])
+# One row per outlet and year. An outlet that changed bandera (brand) during the
+# year would otherwise appear twice at the same coordinates and count itself as a
+# rival at zero distance; it keeps the brand it flew in most months of that year.
+act <- b[canal_de_comercializacion == "Al público",
+         .(meses = uniqueN(periodo_dt)),
+         by = .(nro_inscripcion, anio = as.integer(anio), bandera, departamento, provincia)]
+setorder(act, nro_inscripcion, anio, -meses, bandera)
+act <- act[, .SD[1], by = .(nro_inscripcion, anio)]
+act[, meses := NULL]
 rm(b); invisible(gc())
 act <- act[!is.na(anio)]
 act[, mercado := paste0(provincia, "||", departamento)]

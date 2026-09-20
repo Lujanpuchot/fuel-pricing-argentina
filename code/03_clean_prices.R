@@ -215,6 +215,10 @@ eess_all_cleaned3_cut[, flag_precio_cero :=
                         !is.na(precio_sin_impuestos_num) &
                         precio_sin_impuestos_num == 0]
 
+# Prices are nominal pesos per litre, so these cutoffs are absolute over a
+# series whose median goes from 0.99 in 2004 to 191 in 2023. They catch what
+# is corrupt at any date, not what is implausible for its year: 9 rows at
+# zero, 587 at or below 0.01 and 807 in (0.01, 0.1].
 eess_all_cleaned3_cut[, flag_precio_muy_bajo :=
                         !is.na(precio_sin_impuestos_num) &
                         precio_sin_impuestos_num > 0 &
@@ -228,6 +232,12 @@ eess_all_cleaned3_cut[, flag_precio_bajo_sospechoso :=
                         precio_sin_impuestos_num <= 0.1]
 
 # High prices, by order of magnitude
+# 282 rows sit above 100,000 pesos per litre. The cutoff is generous for the
+# early years: prices of about 99,000 survive it in 2007 and 2010, when a
+# litre cost around 2 pesos. Measured against the median of their own year,
+# 1,552 rows exceed it more than twentyfold and 1,383 of those pass this
+# filter, all of them between 2004 and 2009. A cutoff relative to the year
+# would catch them; this one is meant only to remove corrupt values.
 eess_all_cleaned3_cut[, flag_precio_alto_100k :=
                         !is.na(precio_sin_impuestos_num) &
                         precio_sin_impuestos_num > 100000]
