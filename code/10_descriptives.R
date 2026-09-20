@@ -217,7 +217,7 @@ tabla_01 <- data.table(
 save_tex_table(
   tabla_01,
   fs::path(DIR_TABLES, "01_foto_general_base.tex"),
-  caption = "Foto general de la base cleaned7 alternative sinceappearance.",
+  caption = "Foto general de la base de análisis.",
   label = "tab:foto_general_base"
 )
 
@@ -1929,12 +1929,12 @@ BLANCA <- c("BLANCA","SIN EMPRESA BANDERA")
 PRODS  <- c("Nafta (súper) entre 92 y 95 Ron","Gas Oil Grado 2")
 # Regime breaks: YPF nationalized (May 2012), price deregulation (November 2017),
 # price freeze (August 2019).
-REGS   <- data.frame(x=as.Date(c("2012-05-01","2017-11-01","2019-08-01")),
+REGS   <- data.frame(x=as.Date(c("2012-05-01","2017-10-01","2019-08-01")),
                      lab=c("2012 · YPF estatal","2017 · desregulación","2019 · congelamiento"))
 
 regime_of <- function(d) factor(
   fifelse(d <  as.Date("2012-05-01"), "YPF privada",
-   fifelse(d <  as.Date("2017-11-01"), "Estatal·regulado",
+   fifelse(d <  as.Date("2017-10-01"), "Estatal·regulado",
     fifelse(d <  as.Date("2019-08-01"), "Estatal·desreg.", "Estatal·congel."))),
   levels=c("YPF privada","Estatal·regulado","Estatal·desreg.","Estatal·congel."))
 
@@ -2090,14 +2090,14 @@ PRIV   <- c("SHELL C.A.P.S.A.", "ESSO PETROLERA ARGENTINA S.R.L", "AXION",
             "PETROBRAS", "Pampa Energia", "PUMA", "OIL COMBUSTIBLES S.A.")
 BLANCA <- c("BLANCA", "SIN EMPRESA BANDERA")
 PRODS  <- c("Nafta (súper) entre 92 y 95 Ron", "Gas Oil Grado 2")
-REGS   <- data.frame(x = as.Date(c("2012-05-01", "2017-11-01", "2019-08-01")),
+REGS   <- data.frame(x = as.Date(c("2012-05-01", "2017-10-01", "2019-08-01")),
                      lab = c("2012 · YPF estatal", "2017 · desregulación", "2019 · congelamiento"))
 # Pampas core vs. periphery (Pampeana region, as in Culós et al. 2024)
 NUCLEO <- c("BUENOS AIRES", "CAPITAL FEDERAL", "SANTA FE", "CORDOBA", "ENTRE RIOS", "LA PAMPA")
 
 regime_of <- function(d) factor(
   fifelse(d <  as.Date("2012-05-01"), "YPF privada",
-   fifelse(d <  as.Date("2017-11-01"), "Estatal·regulado",
+   fifelse(d <  as.Date("2017-10-01"), "Estatal·regulado",
     fifelse(d <  as.Date("2019-08-01"), "Estatal·desreg.", "Estatal·congel."))),
   levels = c("YPF privada", "Estatal·regulado", "Estatal·desreg.", "Estatal·congel."))
 
@@ -2529,7 +2529,7 @@ REGS <- data.frame(x=as.Date(c("2012-05-01","2017-10-01","2019-08-01")),
                    lab=c("2012 · YPF estatal","2017 · desregulación","2019 · congelamiento"))
 regime_of <- function(d) factor(
   fifelse(d <  as.Date("2012-05-01"), "YPF privada",
-   fifelse(d <  as.Date("2017-11-01"), "Estatal·regulado",
+   fifelse(d <  as.Date("2017-10-01"), "Estatal·regulado",
     fifelse(d <  as.Date("2019-08-01"), "Estatal·desreg.", "Estatal·congel."))),
   levels=c("YPF privada","Estatal·regulado","Estatal·desreg.","Estatal·congel."))
 L_BBL <- 158.987; L_GAL <- 3.78541

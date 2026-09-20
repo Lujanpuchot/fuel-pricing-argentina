@@ -485,11 +485,18 @@ cat(sprintf("Located (exact or locality): %d (%.1f%%)\n",
 
 # 3.5 Distance to the nearest refinery (exact and locality levels) ----
 # Refinery coordinates are approximate (two decimals).
+# The eight refineries that supplied the domestic market over the sample. San
+# Lorenzo (Oil Combustibles) is needed to place the OIL brand family, and
+# leaving it out overstated the distance for stations in Santa Fe.
+# Coordinates are at locality level, off by a few km. That is immaterial for
+# distances of hundreds of km, but should be checked before any finer use.
 REF <- data.table(
-  refineria = c("La Plata (YPF)","Luján de Cuyo (YPF)","Plaza Huincul (YPF)","Dock Sud (Raízen/Shell)",
-                "Campana (Axion/PAE)","Bahía Blanca (Trafigura/Puma)","Campo Durán (Refinor)"),
-  lat = c(-34.86,-33.03,-38.93,-34.65,-34.17,-38.75,-22.20),
-  lon = c(-57.90,-68.88,-69.20,-58.34,-58.96,-62.27,-63.70))
+  refineria = c("La Plata (YPF)","Luján de Cuyo (YPF)","Plaza Huincul (YPF)",
+                "Dock Sud (Raízen/Shell)","Campana (Axion/PAE)",
+                "Bahía Blanca (Trafigura/Puma)","Campo Durán (Refinor)",
+                "San Lorenzo (Oil)"),
+  lat = c(-34.86, -33.03, -38.93, -34.65, -34.17, -38.75, -22.20, -32.72),
+  lon = c(-57.90, -68.88, -69.20, -58.34, -58.96, -62.27, -63.70, -60.75))
 ub <- g[precision %in% c("exacta","localidad") & !is.na(lat)]
 pe <- st_as_sf(ub, coords = c("lon","lat"), crs = 4326)
 pr <- st_as_sf(REF, coords = c("lon","lat"), crs = 4326)

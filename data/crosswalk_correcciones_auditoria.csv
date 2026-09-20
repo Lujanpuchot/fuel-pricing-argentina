@@ -1,6 +1,6 @@
 provincia|localidad|dep_nuevo|confianza|justificacion
-BUENOS AIRES|EXALTACION DE LA CRUZ|Exaltación de la Cruz|alta|georef por ID + dir RN8 km 82 (Parada Robles); Bahía Blanca era basura del bug
-BUENOS AIRES|JAUREGUI|Luján|alta|Jáuregui/Villa Flandria es Luján; Almirante Brown era basura del bug
+BUENOS AIRES|EXALTACION DE LA CRUZ|Exaltación de la Cruz|alta|georef por ID + dir RN8 km 82 (Parada Robles); la versión anterior asignaba Bahía Blanca, por el error de indexado
+BUENOS AIRES|JAUREGUI|Luján|alta|Jáuregui/Villa Flandria es Luján; la versión anterior asignaba Almirante Brown, por el error de indexado
 BUENOS AIRES|SAN NICOLAS|San Nicolás|alta|dir Av Gral Savio 1510 (SOMISA); Comuna 1 = ambigüedad provincia-por-nombre (CABA)
 BUENOS AIRES|URQUIZA|Pergamino|alta|dir RUTA 8 KM 206 = Urquiza, partido Pergamino; Comuna 12 = ambigüedad CABA
 BUENOS AIRES|LA NIÑA|9 de Julio|alta|La Niña es el pueblo rural de 9 de Julio; Arrecifes = fuzzy match errado de pasada 1
@@ -10,7 +10,7 @@ BUENOS AIRES|R. SOURDEAUX|Malvinas Argentinas|alta|Ingeniero Adolfo Sourdeaux (g
 BUENOS AIRES|TORTUGAS|Escobar|alta|dir RUTA 9 KM 36.5 = Panamericana ramal Campana; el complejo OPESSA/YPF de AUSOL km 36.5 está en zona Garín (Escobar) según guías; NO es Tortuguitas (eso sería RN8)
 BUENOS AIRES|LOPEZ ARIAS|San Nicolás|alta|el operador es 'COOPERATIVA AGRICOLA CONESA LIMITADA' (Conesa = partido San Nicolás) y la dir RN188 km 24.5 coincide con la zona de Conesa
 BUENOS AIRES|PARAJE POLOLA|General Pueyrredón|alta|La Polola = paraje de la jurisdicción de Batán, partido Gral. Pueyrredón (prensa local, mapcarta); NOTA: la est está en km 25.3 y el límite con Gral. Alvarado ronda km 23 — pegada al borde
-CORDOBA|FERREYRA|Capital|alta|Ferreyra = barrio SE de Córdoba capital (dir Av Amadeo Sabattini 5815); Lavalle era basura del bug
+CORDOBA|FERREYRA|Capital|alta|Ferreyra = barrio SE de Córdoba capital (dir Av Amadeo Sabattini 5815); la versión anterior asignaba Lavalle, por el error de indexado
 CORDOBA|LAS PEÑAS|Totoral|alta|dir RN9 KM 803 = Las Peñas (Totoral); la homónima de Río Cuarto es Las Peñas Sud
 CORDOBA|ALTO GRANDE|San Alberto|alta|georef /asentamientos (BAHRA): 'Alto Grande, Córdoba, San Alberto, Paraje'; dir RP15 consistente
 CORDOBA|LAS ENSENADAS|Río Cuarto|media|dir RN35 km 695 (Río Cuarto ciudad ~km 690) = dpto Río Cuarto
@@ -29,7 +29,7 @@ LA PAMPA|CONELLO|Conhelo|alta|typo de Conhelo; la propia dir dice 'ACCESO A CONH
 LA PAMPA|PADRE BUODO|Utracán|alta|dir RUTA 35 Y RUTA 152 = cruce de Padre Buodo, dpto Utracán (zona Gral Acha)
 LA PAMPA|TOMAS MANUEL DE ANCHORENA|Atreucó|alta|Tomás M. Anchorena (georef) = dpto Atreucó
 LA RIOJA|GDOR. GORDILLO|Chamical|alta|existe la 'ACA Estación Nº 38 Chamical' (geodestinos La Rioja) y la est de la base es del AUTOMOVIL CLUB con bandera YPF; Gob. Gordillo = nombre viejo del dpto Chamical
-MENDOZA|LAVALLE|Lavalle|alta|la dir dice COSTA DE ARAUJO (distrito de Lavalle); A.G.Chaves era basura del bug
+MENDOZA|LAVALLE|Lavalle|alta|la dir dice COSTA DE ARAUJO (distrito de Lavalle); la versión anterior asignaba Adolfo Gonzales Chaves, por el error de indexado
 MENDOZA|RUSELL|Maipú|alta|Russell es distrito de Maipú (dir Urquiza 6630)
 MENDOZA|VALLE DE LAS LEÑAS|Malargüe|alta|Las Leñas (georef) = Malargüe; dir RP222 km 48
 MENDOZA|VILLA 25 DE MAYO|San Rafael|alta|Villa 25 de Mayo (georef) = San Rafael
@@ -42,9 +42,9 @@ MISIONES|PTO. PIRAY|Montecarlo|alta|Puerto Piray = dpto Montecarlo (dir RP16)
 RIO NEGRO|BALNEARIO LAS GRUTAS|San Antonio|alta|Las Grutas (georef) = dpto San Antonio
 RIO NEGRO|CAMPO GRANDE|General Roca|alta|dir RN151 km 31 = municipio Campo Grande (Villa Manzano), dpto General Roca
 SALTA|GRAL.MOSCONI|General José de San Martín|alta|Gral Mosconi sobre RN34 km 1425 (zona Tartagal) = dpto San Martín
-SALTA|LOS ANDES|Los Andes|alta|San Antonio de los Cobres = dpto Los Andes; Capital era basura del bug
+SALTA|LOS ANDES|Los Andes|alta|San Antonio de los Cobres = dpto Los Andes; la versión anterior asignaba Capital, por el error de indexado
 SAN JUAN|ALBARDON|Albardón|alta|dir La Laja 1101 (La Laja es Albardón)
-SAN JUAN|ANGACO|Angaco|alta|dpto propio; Capital era basura del bug
+SAN JUAN|ANGACO|Angaco|alta|dpto propio; la versión anterior asignaba Capital, por el error de indexado
 SAN JUAN|LAS CASUARINAS|25 de Mayo|alta|dir RN20 km 1015 = Las Casuarinas, dpto 25 de Mayo (SJ)
 SAN JUAN|POCITOS|Pocito|alta|dir Av Ing Marcos Zalazar / RN40 km 154 = dpto Pocito
 SAN JUAN|SARMIENTO|Sarmiento|alta|dir RUTA 40 Y RUTA 319 (zona Media Agua) = dpto Sarmiento

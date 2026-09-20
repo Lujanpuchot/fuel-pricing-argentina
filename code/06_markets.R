@@ -11,7 +11,7 @@
 #         crosswalk_localidad_departamento.csv  (rewritten only when rebuilding)
 #
 # Why departments rather than localities. A market in the demand model is a
-# province x department x month. The locality is too fine: almost half of the
+# province x department x quarter. The locality is too fine: almost half of the
 # localities are served by a single brand, which leaves substitution
 # unidentified. The department pools neighboring localities, removes these
 # spurious monopolies and keeps the periphery in the sample. In 2024 (channel

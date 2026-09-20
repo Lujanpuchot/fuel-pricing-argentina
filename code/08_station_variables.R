@@ -58,15 +58,18 @@ BASE  <- file.path(DIR_INT, "eess_all_cleaned7_alternative_sinceappearance_con_c
 OUT_E <- file.path(DIR_INT, "variables_espaciales_estacion.csv")
 OUT_P <- file.path(DIR_INT, "variables_espaciales_panel.csv")
 
-# Refineries. Coordinates are approximate (locality level, off by a few km). This
-# is immaterial for distances of hundreds of km, but they should be checked
-# before any use that needs fine precision.
+# The eight refineries that supplied the domestic market over the sample. San
+# Lorenzo (Oil Combustibles) is needed to place the OIL brand family, and
+# leaving it out overstated the distance for stations in Santa Fe.
+# Coordinates are at locality level, off by a few km. That is immaterial for
+# distances of hundreds of km, but should be checked before any finer use.
 REF <- data.table(
   refineria = c("La Plata (YPF)","Luján de Cuyo (YPF)","Plaza Huincul (YPF)",
                 "Dock Sud (Raízen/Shell)","Campana (Axion/PAE)",
-                "Bahía Blanca (Trafigura/Puma)","Campo Durán (Refinor)"),
-  lat = c(-34.86, -33.03, -38.93, -34.65, -34.17, -38.75, -22.20),
-  lon = c(-57.90, -68.88, -69.20, -58.34, -58.96, -62.27, -63.70))
+                "Bahía Blanca (Trafigura/Puma)","Campo Durán (Refinor)",
+                "San Lorenzo (Oil)"),
+  lat = c(-34.86, -33.03, -38.93, -34.65, -34.17, -38.75, -22.20, -32.72),
+  lon = c(-57.90, -68.88, -69.20, -58.34, -58.96, -62.27, -63.70, -60.75))
 
 # 1.1 Consolidated geocoding ----
 g <- fread(FIN, encoding = "UTF-8")
@@ -180,6 +183,11 @@ sf_use_s2(TRUE)
 BASE <- file.path(INT, "eess_all_cleaned7_alternative_sinceappearance_con_crosswalk.rds")
 norm <- function(x) toupper(trimws(iconv(as.character(x), "", "ASCII//TRANSLIT")))
 
+# The eight refineries that supplied the domestic market over the sample. San
+# Lorenzo (Oil Combustibles) is needed to place the OIL brand family, and
+# leaving it out overstated the distance for stations in Santa Fe.
+# Coordinates are at locality level, off by a few km. That is immaterial for
+# distances of hundreds of km, but should be checked before any finer use.
 REF <- data.table(
   refineria = c("La Plata (YPF)","Luján de Cuyo (YPF)","Plaza Huincul (YPF)",
                 "Dock Sud (Raízen/Shell)","Campana (Axion/PAE)",
