@@ -10,7 +10,7 @@ This repository contains the data work the estimation builds on: the station-lev
 
 ![YPF's price gap against the private brands, by government](docs/figures/ypf_private_gap_by_government.png)
 
-*Mean price gap of YPF against the large private brands, taken within the same locality and month, by government. Negative values mean YPF is cheaper. Green points are the unbranded outlets, measured against the same benchmark. Intervals are 95%, with localities as clusters. Two things stand out: the gap is already there in 2005-2012, while YPF was owned by Repsol, and it closes, or reverses, over 2016-2019, the years pump prices were free. Drawn by `code/figure_readme.R`, which is the estimate of figure R3 of `code/10_descriptives.R` grouped by government instead of by pricing regime.*
+*Price of YPF against the large private brands, compared within the same locality and month, so the gap is not driven by where each brand sits. The grey line is the median across localities, month by month; the blue segment is the mean of each government with an interval from the spread of locality means. Two things to note. The gap is already there in 2005-2012, while YPF belonged to Repsol, and it closes over 2016-2019, the only years pump prices were free. And ownership cannot be separated from policy here: YPF was privately owned only in years when prices were also being negotiated with the government, which is why the thesis identifies the weight on consumer surplus from the pricing conditions rather than from this comparison. The unbranded outlets, not drawn, sit above the large private brands in every block, by 0.6 to 4 percent. Drawn by `code/figure_readme.R`.*
 
 ## Data
 
@@ -87,7 +87,7 @@ Market structure and brand shares, the YPF-private price gap, volumes and report
 
 ![Pump price of regular gasoline against Brent](docs/figures/pump_price_vs_brent.png)
 
-*National median pre-tax price of regular gasoline against Brent, both in USD per litre at the parallel exchange rate, which is the one that keeps the series comparable over a period when the official rate was held far from the market. The bottom panel is the ratio of the two, so a value of one means the litre at the pump, before taxes, was worth a litre of crude. Dashed lines mark the 2012 renationalization, the 2017 deregulation and the 2019 price freeze. Drawn by `code/figure_readme.R`, from the series that section 5 of `code/10_descriptives.R` writes.*
+*National median pre-tax price of regular gasoline against Brent, in USD per litre. Brent is quoted in dollars; the pump price is converted at the parallel exchange rate, which is the one that keeps the series comparable over a period when the official rate was held far from the market. The bottom panel is the ratio of the two. It is a comparison, not a margin: YPF refines domestic crude, which was priced well below Brent in several of these years. Dashed lines mark the 2012 renationalization, the 2017 deregulation and the 2019 price freeze. Drawn by `code/figure_readme.R` from the series that section 5 of `code/10_descriptives.R` writes.*
 
 ## Some things the data required
 
