@@ -4,7 +4,7 @@ Code for my M.A. thesis in Economics at Universidad de San Andrés, *When the St
 
 YPF is the largest fuel retailer in Argentina. It was renationalized in 2012, and governments of different signs have leaned on it to hold pump prices down. The thesis asks how far YPF's prices depart from profit maximization, under which administrations, what that cost the firm in forgone margin, and how much of it reached consumers. I estimate a random-coefficients logit demand for gasoline and diesel and a supply side in which YPF maximizes profit plus a weight λ on consumer surplus, and I compare YPF with private brands that face the same costs in the same markets.
 
-The design is described in [docs/research_proposal.md](docs/research_proposal.md). The choices fixed before estimating the model are recorded in [docs/analysis_plan.md](docs/analysis_plan.md), and what is still undecided about the data, with the evidence and the rule I am considering for each, in [docs/open_issues.md](docs/open_issues.md).
+The design is described in [docs/research_proposal.md](docs/research_proposal.md). The choices fixed before estimating the model are recorded in [docs/analysis_plan.md](docs/analysis_plan.md), and what is still undecided about the data, with the evidence and the rule I am considering for each, in [docs/open_issues.md](docs/open_issues.md) and in the [open issues](https://github.com/Lujanpuchot/fuel-pricing-argentina/issues).
 
 This repository contains the data work the estimation builds on: the station-level panel, the geocoding of stations, spatial and market-level covariates, and the descriptive analysis.
 
