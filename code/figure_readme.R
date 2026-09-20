@@ -9,6 +9,7 @@
 #
 # Input:  eess_all_cleaned7_alternative_sinceappearance.rds
 # Output: docs/figures/ypf_private_gap_by_government.png
+#         docs/figures/pump_price_vs_brent.png
 
 suppressPackageStartupMessages({
   library(data.table)
@@ -104,3 +105,69 @@ p <- ggplot(r, aes(gov, est, color = grp)) +
 dir.create(dirname(OUT), showWarnings = FALSE, recursive = TRUE)
 ggsave(OUT, p, width = 9.5, height = 6.4, dpi = 200)
 cat("saved:", OUT, "\n")
+
+# Second figure: the pump price against crude ----
+# The national median pre-tax price of regular gasoline against Brent, both in
+# dollars per litre. It repeats figure K1 of 10_descriptives.R with English
+# labels; the series it reads is the one that section 5 writes.
+
+SERIE <- file.path(DIR_COVAR, "serie_super_vs_costos.csv")
+
+if (!file.exists(SERIE)) {
+  cat("serie_super_vs_costos.csv not found; run section 5 of 10_descriptives.R first\n")
+} else {
+  s <- fread(SERIE, encoding = "UTF-8")
+  s[, mes := as.Date(mes)]
+
+  # The parallel rate is the one that makes the series comparable over time: the
+  # official rate was held far from the market rate for much of the period.
+  long <- rbind(
+    s[!is.na(super_sin_usd_l_blue), .(mes, usd_l = super_sin_usd_l_blue, serie = "Regular gasoline, pre-tax")],
+    s[!is.na(brent_usd_l),          .(mes, usd_l = brent_usd_l,          serie = "Brent crude")])
+  long[, serie := factor(serie, levels = c("Regular gasoline, pre-tax", "Brent crude"))]
+
+  ratio <- s[!is.na(super_sin_usd_l_blue) & !is.na(brent_usd_l),
+             .(mes, r = super_sin_usd_l_blue / brent_usd_l)]
+
+  BREAKS <- data.frame(x = as.Date(c("2012-05-01", "2017-10-01", "2019-08-01")))
+
+  top <- ggplot(long, aes(mes, usd_l, color = serie)) +
+    geom_vline(data = BREAKS, aes(xintercept = x), linetype = "dashed", color = "grey60", linewidth = .3) +
+    geom_line(linewidth = .6) +
+    scale_color_manual(values = c("Regular gasoline, pre-tax" = "#1F3864", "Brent crude" = "#C55A11")) +
+    scale_x_date(date_breaks = "3 years", date_labels = "%Y") +
+    labs(title = "The pump price of gasoline and the price of crude, in dollars",
+         subtitle = paste0("National median pre-tax price of regular gasoline against Brent, ",
+                           "USD per litre at the parallel exchange rate.\nDashed lines: the 2012 ",
+                           "renationalization, the 2017 deregulation and the 2019 price freeze."),
+         x = NULL, y = "USD per litre", color = NULL) +
+    theme_minimal(base_size = 11) +
+    theme(legend.position = "top", legend.justification = "left",
+          plot.title = element_text(face = "bold", size = 13),
+          plot.subtitle = element_text(color = "grey30", size = 9.5, lineheight = 1.15),
+          plot.title.position = "plot",
+          panel.grid.minor = element_blank())
+
+  bottom <- ggplot(ratio, aes(mes, r)) +
+    geom_vline(data = BREAKS, aes(xintercept = x), linetype = "dashed", color = "grey60", linewidth = .3) +
+    geom_hline(yintercept = 1, color = "grey45", linewidth = .3) +
+    geom_line(linewidth = .55, color = "grey20") +
+    scale_x_date(date_breaks = "3 years", date_labels = "%Y") +
+    labs(x = NULL, y = "Gasoline / Brent") +
+    theme_minimal(base_size = 11) +
+    theme(panel.grid.minor = element_blank())
+
+  # Stacked with gtable, which ggplot2 already depends on, after equalizing the
+  # widths of the two panels. Same helper as section 5 of 10_descriptives.R.
+  g1 <- ggplotGrob(top); g2 <- ggplotGrob(bottom)
+  w <- grid::unit.pmax(g1$widths, g2$widths); g1$widths <- w; g2$widths <- w
+  a1 <- g1$layout[g1$layout$name == "panel", "t"]; g1$heights[a1] <- grid::unit(2.1, "null")
+  a2 <- g2$layout[g2$layout$name == "panel", "t"]; g2$heights[a2] <- grid::unit(1, "null")
+  g <- rbind(g1, g2, size = "first")
+
+  png(file.path("docs", "figures", "pump_price_vs_brent.png"),
+      width = 9.5, height = 6.4, units = "in", res = 200)
+  grid::grid.draw(g)
+  dev.off()
+  cat("saved: docs/figures/pump_price_vs_brent.png\n")
+}

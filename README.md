@@ -87,7 +87,7 @@ Market structure and brand shares, the YPF-private price gap, volumes and report
 
 ![Pump price of regular gasoline against Brent](docs/figures/pump_price_vs_brent.png)
 
-*National median pre-tax price of regular gasoline against Brent, both in USD per litre (parallel exchange rate). Bottom panel: ratio of the two. Drawn by section 5 of `code/10_descriptives.R` as `figK1_super_vs_brent.png`.*
+*National median pre-tax price of regular gasoline against Brent, both in USD per litre at the parallel exchange rate, which is the one that keeps the series comparable over a period when the official rate was held far from the market. The bottom panel is the ratio of the two, so a value of one means the litre at the pump, before taxes, was worth a litre of crude. Dashed lines mark the 2012 renationalization, the 2017 deregulation and the 2019 price freeze. Drawn by `code/figure_readme.R`, from the series that section 5 of `code/10_descriptives.R` writes.*
 
 ## Some things the data required
 
