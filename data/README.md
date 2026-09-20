@@ -55,6 +55,24 @@ Source: [Precios en Surtidor, Resolución 314/2016](http://datos.energia.gob.ar/
 
 Section 5 and section 6 read these files from the interim folder if they are there, and otherwise from this folder, so the geocoding runs on a fresh clone. Sections 1 to 4 do not need them and already produce a coordinate for every station, at a lower share of exact matches: the two files take exact locations from about 66% to 88.6%.
 
+## Refining cost from the 20-F filings
+
+`20f_ypf_extract.csv` is one row per fiscal year, 2004 to 2024, read by hand from the annual reports YPF files with the US Securities and Exchange Commission (form 20-F, CIK 0000904851, downloaded from EDGAR). Part 8 of `09_market_data.R` uses it for two layers of the unit cost: the realized price of crude sold in the domestic market and the refining cost per barrel.
+
+| Column | Content |
+|---|---|
+| `anio_fiscal` | Fiscal year |
+| `crudo_realizado_usd_bbl` | Realized price of crude, USD per barrel |
+| `refino_cash_cost` | Refining cost per barrel, with its unit in `refino_cash_cost_unidad` |
+| `*_label` | The exact wording of the table the figure was taken from |
+| `downstream_op_income`, `ventas_refinados_km3`, `crudo_procesado_km3d` | Operating income of the segment, refined sales and crude throughput |
+| `filing_url` | The filing on EDGAR, so every figure can be traced |
+| `notas` | What had to be decided for that year |
+
+Only ten of the twenty-one years carry a unit refining cost: from 2014 the 20-F reports changes rather than levels, so the series is chained from the 2013 level with the percentages each filing gives. The way the presentation changes over time, and the cases where a filing restates a figure it had published before, are written up in `20f_ypf_notas.md`.
+
+Source: public filings of YPF S.A. with the SEC. The extract and the notes are my own.
+
 ## The data tree
 
 `code/00_config.R` expects this layout under `ROOT`. The raw retail files (`public_vi_access_eess_*.rds`, one per period) are the price and volume reports that outlets file with the Energy Secretariat under Resolution 1104/2004; everything under `Intermedio/` is written by the pipeline.
@@ -79,11 +97,10 @@ Beyond the files above, several steps read data that is neither shipped here nor
 | `localizadores_marcas.csv` | `08` | The station amenities section stops |
 | `raw_sesco/` | `09` | The downstream section stops |
 | `censo2022_vs_proyeccion_depto.csv` | `09` | The census-anchored population variant stops |
-| `20f_ypf_extract.csv` | `09` | Refining cost falls back to a placeholder of 5 USD per barrel, flagged in the output but not an error |
 | `bio_precios_completado.csv` | `09` | Biofuel prices fall back to a fossil-cost fraction, flagged |
 | `raw_series/usgc_gasolina_fob_fred.csv`, `raw_series/dolar_blue_mensual_ambito.csv` | `10` | The price-against-costs figures cannot be drawn |
 
-The two fallbacks in `09_market_data.R` deserve attention: they let the script finish with a substituted value rather than stop, and the substitution reaches the cost series. The `fuente_*` columns of the output record when that happened.
+`09_market_data.R` has two fallbacks that let it finish with a substituted value instead of stopping: the refining cost and the biofuel price. The refining cost no longer falls back, because the extract of the 20-F filings is in this folder; the biofuel one still can, and the `fuente_*` columns of the output record when it happened.
 
 ## Glossary
 

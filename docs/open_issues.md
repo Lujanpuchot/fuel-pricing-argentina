@@ -47,6 +47,36 @@ Two cases in `05_business_type.R` were left as they are, both documented in the 
 - The "since first appearance" rule types 1,289 outlet-months at 36 outlets as liquid fuels only, although in those months they sell only compressed natural gas. The monthly rule would call them CNG only.
 - The PRVE branch never runs, because no sales channel in the panel contains that string, so the type "Combustibles Líquidos + PRVE" is never inferred even though the source reports it on 25,517 records.
 
+## Open questions in the geographic variables
+
+### Highway addresses on provincial routes
+
+Section 5 of `07_geocode_stations.R` places addresses of the form "Ruta 9 km 412" with the kilometre posts of the national highway network. The parser keeps the number and drops the class, so an address on provincial route 11 is looked up among the posts of national route 11, which is a different road. Of the 1,392 addresses that carry a kilometre, 53 say provincial, 270 say national and 1,069 say neither. The gate that rejects a new point more than 80 km from the current one catches the absurd cases, but it cannot act on an outlet that had no coordinate to begin with.
+
+The rule I am considering is to skip the provincial ones, which the address already identifies, and to keep the unmarked ones only when the gate can check them.
+
+### Localities that straddle department boundaries
+
+The pipeline keys a market on (province, locality) and gives each pair one department. Asking georef for the full list of localities of every province returns 52 names that belong to more than one department of their own province; the panel uses 14 of them, covering 70 outlets, 0.8% of the total.
+
+Most are not two towns sharing a name. They are single urban areas of Greater Buenos Aires whose territory crosses a partido boundary: Tortuguitas appears in three, and Del Viso, Gerli, Villa Adelina, Canning and Malvinas Argentinas in two. Those outlets are assigned to one of the partidos they span, which may not be the one they physically sit in. The partidos involved are adjacent and comparable, so the market is a neighbour rather than a stranger.
+
+The rule I am considering is to take the department from the coordinate rather than from the name for outlets with an exact location, which is 88.6% of them, and to leave the name-based assignment for the rest.
+
+## Open questions in the cost series
+
+### The refining cost factor for 2024
+
+From 2014 the 20-F stops reporting refining cost per barrel and gives only changes, so the series is chained from the 2013 level. Three years have no unit figure and are derived from the total cost, adjusted by throughput, and 2024 does it differently from the other two:
+
+```r
+"2015" = 1.178 * 46.2 / 47.5               # the whole factor is adjusted
+"2020" = 1.182 * 44.1 / 37.4               # the whole factor is adjusted
+"2024" = 1 + (189 / 1600) * (46.8 / 47.9)  # only the increment is adjusted
+```
+
+Under the rule of 2015 and 2020, 2024 would be about 1.0925 instead of 1.1154. The difference is two points in one year, and because the series is chained it carries into every quarter after it. The asymmetry may be deliberate, since 2024 is derived from an amount in dollars rather than from a published percentage, but the two treatments should be stated and one of them chosen.
+
 ## Known issues in the exported tables
 
 These affect the LaTeX output, not the panel.
@@ -58,6 +88,8 @@ These affect the LaTeX output, not the panel.
 
 ## Smaller things
 
+- Section 6 of `08_station_variables.R` ends after printing the heading of a CNG cross-check between the locator and the address; the check itself was never written.
+- Outlets with no department are still sent to Nominatim in section 1 of `07_geocode_stations.R`. The department is what bounds the search box and what the result is checked against, so for those outlets a match can come back from anywhere in the country and still be labelled exact.
 - `03_clean_prices.R` has no flag for negative prices: every low-price flag requires the price to be positive. `diag_precio$n_negativos` reports whether any exist.
 - `02_clean_volume.R` writes `eess_all_cleaned1.rds` twice, first with the auxiliary columns and then without, so an interrupted run leaves the wider file under that name.
 - Deduplication keeps the record from the file whose name sorts first, which is the older one. Only the substantive variables are compared, so the columns that exist only in the newer files are missing in the record that is kept.

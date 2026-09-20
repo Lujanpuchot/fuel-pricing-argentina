@@ -39,7 +39,7 @@ code/
   09_market_data.R            population, wages, prices and costs by market
   10_descriptives.R           tables and figures
   diagnostics_data_quality.R  how the cleaning thresholds were chosen
-data/                         the crosswalk and the geocoding reference tables
+data/                         the crosswalk, the geocoding reference tables and the 20-F extract
 docs/
   research_proposal.md
   analysis_plan.md

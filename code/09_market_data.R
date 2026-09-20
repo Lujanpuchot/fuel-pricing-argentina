@@ -1046,6 +1046,9 @@ M <- M[anio*100 + mes >= 200412 & anio <= 2024][order(anio, mes)]
 
 # Backcast 2004-12 to 2005-12: annual anchor of the 20-F if available, otherwise the 2006 ratio to Brent
 f20 <- fs::path(RAWC, "20f_ypf_extract.csv")
+# The extract of the 20-F filings also ships with the repository; without it the
+# refining cost below stays at the placeholder of 5 USD per barrel.
+if (!fs::file_exists(f20)) f20 <- fs::path("data", "20f_ypf_extract.csv")
 r06 <- M[anio == 2006, mean(p_crudo_ypf/brent_usd_m3)]
 if (file.exists(f20)) {
   t20 <- fread(f20)
