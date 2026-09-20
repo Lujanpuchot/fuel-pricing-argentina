@@ -712,6 +712,7 @@ cat("\ngeocodificacion_final.csv overwritten\n")
 
 FIN    <- file.path(DIR_INT, "geocodificacion_final.csv")
 POSTES <- file.path(DIR_INT, "postes_km_dnv.csv")
+if (!file.exists(POSTES)) POSTES <- file.path("data", "postes_km_dnv.csv")   # copy in the repository
 GATE_KM <- 80   # The new point must fall within 80 km of the current location (catches misparsed routes)
 
 norm <- function(x) toupper(trimws(iconv(as.character(x), "", "ASCII//TRANSLIT")))
@@ -822,6 +823,7 @@ cat("geocodificacion_final.csv overwritten\n")
 
 FIN <- file.path(DIR_INT, "geocodificacion_final.csv")
 CO  <- file.path(DIR_INT, "coords_oficiales_energia.csv")
+if (!file.exists(CO)) CO <- file.path("data", "coords_oficiales_energia.csv")   # copy in the repository
 haversine <- function(lat1, lon1, lat2, lon2){
   R<-6371; p<-pi/180
   a <- sin((lat2-lat1)*p/2)^2 + cos(lat1*p)*cos(lat2*p)*sin((lon2-lon1)*p/2)^2

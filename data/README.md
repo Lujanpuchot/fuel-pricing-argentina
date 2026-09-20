@@ -1,6 +1,6 @@
 # Data
 
-The panel itself is not here: the raw and intermediate files add up to about 10 GB. This folder holds the two small tables that `06_markets.R` produces and that are worth keeping under version control, because they were built once and then corrected by hand, and because they are useful on their own.
+The panel itself is not here: the raw and intermediate files add up to about 10 GB. This folder holds the small tables the pipeline needs that are not derived from the panel: the locality-to-department crosswalk, which was built once and corrected by hand, and two public reference datasets used by the geocoding. With them, every step except the panel itself runs on a fresh clone.
 
 ## Locality to department crosswalk
 
@@ -21,16 +21,37 @@ The panel itself is not here: the raw and intermediate files add up to about 10 
 
 Source: [georef](https://apis.datos.gob.ar/georef), the address and administrative geography API of the Argentine government. The file carries no personal data: it is administrative geography plus the locality names as the Energy Secretariat spells them.
 
-## Reference files that have to be downloaded
+## Reference data for the geocoding
 
-Two files that `07_geocode_stations.R` uses were downloaded from their public sources and trimmed to the columns below. There is no script that prepares them: get them once and put them in the interim folder (`DIR_INTERIM`, see `code/00_config.R`).
+Two public datasets, trimmed to the columns the geocoding needs. There is no script that prepares them: they were downloaded once and reduced by hand, so the trimmed versions are kept here.
 
-| File | Source | Columns kept |
-|---|---|---|
-| `postes_km_dnv.csv` | [Kilometre posts](https://datos.transporte.gob.ar/dataset/postes-kilometricos), National Highway Directorate (DNV), layer `poste_1km_2018` | `cod_ruta`, `ruta_num`, `progresiva`, `lat`, `lon` |
-| `coords_oficiales_energia.csv` | [Pump prices](http://datos.energia.gob.ar/dataset/precios-en-surtidor), Energy Secretariat, resource "Precios históricos" | `idempresa`, `latitud`, `longitud`, collapsed to the median coordinate per station |
+### `postes_km_dnv.csv`
 
-Section 5 of `07_geocode_stations.R` uses the first one to resolve addresses of the form "Ruta 9 km 412", and section 6 uses the second one as the top layer of the cascade. Neither section checks whether its file is there, so both stop with a read error if it is missing. Sections 1 to 4 do not need them and produce a complete set of coordinates on their own, at a lower share of exact matches.
+Kilometre posts of the national highway network, 26,432 of them, used by section 5 of `07_geocode_stations.R` to resolve addresses of the form "Ruta 9 km 412".
+
+| Column | Content |
+|---|---|
+| `cod_ruta`, `ruta_num` | Highway code and number |
+| `progresiva` | Kilometre marked by the post |
+| `lat`, `lon` | Coordinates of the post |
+| `distrito` | DNV district |
+
+Source: [Postes Kilométricos](https://datos.transporte.gob.ar/dataset/postes-kilometricos), Secretaría de Transporte, surveyed by the Dirección Nacional de Vialidad. Published as open data, license "Otra (Abierta)".
+
+### `coords_oficiales_energia.csv`
+
+The coordinates each operator registered for its outlets, 5,692 of them, used by section 6 as the top layer of the cascade. `idempresa` is the same identifier as `nro_inscripcion` in the panel, so they merge with no geocoding.
+
+| Column | Content |
+|---|---|
+| `idempresa` | Station identifier |
+| `olat`, `olon` | Median registered coordinate |
+| `n_obs` | Records the median was taken over |
+| `sd_km` | Dispersion of those records, in km |
+
+Source: [Precios en Surtidor, Resolución 314/2016](http://datos.energia.gob.ar/dataset/precios-en-surtidor), Secretaría de Energía, resource "Precios históricos", collapsed to one coordinate per station. Published under Creative Commons Attribution 4.0.
+
+Section 5 and section 6 read these files from the interim folder if they are there, and otherwise from this folder, so the geocoding runs on a fresh clone. Sections 1 to 4 do not need them and already produce a coordinate for every station, at a lower share of exact matches: the two files take exact locations from about 66% to 88.6%.
 
 ## The panel
 
