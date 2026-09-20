@@ -2091,8 +2091,9 @@ cat("- g15_top10_banderas_ultimo_anio_volumen.png\n")
 #
 # Input:  eess_all_cleaned7_alternative_sinceappearance.rds
 #         (boca (outlet) x product x channel x month)
-# Output: figR1_benchmark_shell.png, figR2_ladder_blancas.png,
-#         figR3_gap_condicional_IC.png, figR4_distribucion_gap.png (Gráficos/)
+# Output: figR1_R1_benchmark_shell.png, figR2_R2_ladder_blancas.png,
+#         figR3_R3_gap_condicional_IC.png, figR4_R4_distribucion_gap.png
+#         (Gráficos/; the file names repeat the Rn prefix, as the code builds them)
 #
 # The gap is measured inside a locality x product x month cell, so the stations
 # compared face the same local demand in the same month, and the cells are then
