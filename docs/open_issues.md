@@ -1,6 +1,6 @@
 # Open issues
 
-What is known to be wrong or undecided, with the evidence for each and the rule I am considering. The cleaning in `code/` is deliberately narrow: it removes what is corrupt at any date and leaves anything that needs a judgment call to the point where the estimation sample is built. This file is where those calls are parked.
+What is known to be wrong or undecided, with the evidence for each and the rule I am considering. The cleaning in `code/` is deliberately narrow: it removes what is corrupt at any date and leaves anything that needs a judgment call to the point where the estimation sample is built. This file is where those calls are parked, and each one is also an open issue in the repository.
 
 Counts are measured on the analysis panel, retail sales to the public, unless stated otherwise.
 
