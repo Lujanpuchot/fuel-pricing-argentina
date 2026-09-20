@@ -107,6 +107,8 @@ Rscript run_all.R
 
 or the scripts one at a time, in order. Geocoding is slow because Nominatim allows one request per second; set `FUEL_CONTACT_EMAIL` so that those requests identify you, as its usage policy asks.
 
+How far this goes without my working folder: scripts 1 to 6 need only the six raw files, which are public, and rebuild the analysis panel from scratch. Script 7 needs those plus the two reference tables in `data/`, which are included. Scripts 8 to 10 read a handful of tables that were assembled by hand from public sources and are not redistributed here; [data/](data/) lists them and says what each one is for. Two of them have fallbacks that let the script finish with a substituted value instead of stopping, and the substitution is recorded in the output.
+
 Variable names follow the source data and are in Spanish. Comments are in English.
 
 ## Status
