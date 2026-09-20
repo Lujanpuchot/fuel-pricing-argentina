@@ -16,6 +16,7 @@ suppressPackageStartupMessages({
   library(data.table)
   library(fs)
   library(jsonlite)
+  library(sf)          # section 3, distance to the nearest refinery
 })
 
 source("code/00_config.R")

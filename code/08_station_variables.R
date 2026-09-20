@@ -14,6 +14,7 @@ suppressPackageStartupMessages({
   library(fs)
   library(sf)
   library(jsonlite)
+  library(rnaturalearth)   # section 5, outline of the neighboring countries
 })
 
 source("code/00_config.R")
