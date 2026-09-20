@@ -117,4 +117,8 @@ Variable names follow the source data and are in Spanish. Comments are in Englis
 
 The panel, the geocoding, the covariates and the descriptive analysis are complete. Demand and supply estimation is in progress and its code will be added as it stabilizes.
 
+## Use
+
+© 2026 María Luján Puchot. All rights reserved. The code is published so that it can be read, not reused: please write to me before using any part of it. The files under `data/` that come from public sources keep the licenses of their own publishers, which `data/README.md` records.
+
 María Luján Puchot, Universidad de San Andrés
