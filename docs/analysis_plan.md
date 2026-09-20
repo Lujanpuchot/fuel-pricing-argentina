@@ -10,7 +10,7 @@ This document records the choices fixed before estimating the structural model d
 2. Government, not ownership. YPF's excess weight over private brands changes with the government in office and, in the strong form, is already positive before May 2012, under Repsol.
 3. Geography. The weight is larger in departments where YPF is the only brand.
 
-A fourth hypothesis, that the objective also works through the wholesale price charged to YPF's dealers and only when prices are free, was rejected with the wholesale data before estimation: the wholesale gap between YPF and private brands is about 5 percent under regulation (2004–2015) and about 2 percent in free windows. No vertical bargaining model is estimated.
+A fourth hypothesis, that the objective also works through the wholesale price charged to YPF's dealers and only when prices are free, was rejected with the wholesale data before estimation: the wholesale gap between YPF and private brands is about 5 percent under regulation (2004–2015) and about 2 percent in free windows. No vertical bargaining model is estimated. What remains of that hypothesis is a proposition in the appendix and a descriptive decomposition of where the discount ends up along the chain, which the contract-specific pricing conditions above already identify: at company-operated and consignment stations the firm sets the pump price, while at resale stations it sets the wholesale price and the dealer sets the pump price.
 
 ## Outcomes
 
@@ -30,7 +30,7 @@ A market is a department (457) in a quarter. Market size must not contain the cu
 
 ## Prices and costs
 
-Prices are net of taxes in demand and supply, in constant pesos. Two measures are carried: the net-of-tax price reported by stations, and a reconstruction from the pump price and the statutory schedule of fuel taxes, VAT and regional exemptions. A result that changes sign between them is reported as a band. Rows reporting volume in litres are rescaled and flagged, and the panel must reproduce official national gasoline sales within a ratio of 0.93 to 1.05 in every year from 2010.
+Prices are net of taxes in demand and supply, in constant pesos. Two measures are carried: the net-of-tax price reported by stations, and a reconstruction from the pump price and the statutory schedule of fuel taxes, VAT and regional exemptions. A result that changes sign between them is reported as a band. Thirty-two outlets, 0.4% of the total and 8.1% of volume, report in litres in nearly every month they appear; their volumes are divided by a thousand and flagged, rather than dropped, when the estimation sample is built. The panel must then reproduce official national gasoline sales within a ratio of 0.93 to 1.05 in every year from 2010.
 
 Cost is measured, not inferred from a pricing condition, in the layers listed in the proposal. The mean logistics cost comes from an external tariff and affects only the level of $\lambda$. The provincial step is the median deviation of private brands' resale wholesale prices within operator, product and month. Freight per kilometre is never added to it, since wholesale prices already include freight, and distance bands are capped at about 1.4 percent of the price per 100 km. In months in which a firm's imports are at least 5 percent of its sales over a three-month window, its cost is the import unit value plus biofuel (2.5 and 10 percent as sensitivity).
 
