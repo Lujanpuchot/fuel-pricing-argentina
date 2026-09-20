@@ -8,9 +8,9 @@ The design is described in [docs/research_proposal.md](docs/research_proposal.md
 
 This repository contains the data work the estimation builds on: the station-level panel, the geocoding of stations, spatial and market-level covariates, and the descriptive analysis.
 
-![YPF against the private brands, by regime](docs/figures/ypf_private_gap_by_regime.png)
+![YPF's price gap against the private brands, by government](docs/figures/ypf_private_gap_by_government.png)
 
-*Mean price gap against the large private brands, within the same locality and month, by pricing regime and product. Dark points are YPF, green points the unbranded outlets, with 95% confidence intervals clustered by locality. YPF sells below the private brands throughout, and by more while prices were administered. Drawn by section 2 of `code/10_descriptives.R` as `figR3_R3_gap_condicional_IC.png`.*
+*Mean price gap of YPF against the large private brands, taken within the same locality and month, by government. Negative values mean YPF is cheaper. Green points are the unbranded outlets, measured against the same benchmark. Intervals are 95%, with localities as clusters. Two things stand out: the gap is already there in 2005-2012, while YPF was owned by Repsol, and it closes, or reverses, over 2016-2019, the years pump prices were free. Drawn by `code/figure_readme.R`, which is the estimate of figure R3 of `code/10_descriptives.R` grouped by government instead of by pricing regime.*
 
 ## Data
 
@@ -38,6 +38,7 @@ code/
   08_station_variables.R      rivals, distances, highway and border indicators
   09_market_data.R            population, wages, prices and costs by market
   10_descriptives.R           tables and figures
+  figure_readme.R             the figure on the front page, in English
   diagnostics_data_quality.R  how the cleaning thresholds were chosen
 data/                         the crosswalk, the geocoding reference tables and the 20-F extract
 docs/
