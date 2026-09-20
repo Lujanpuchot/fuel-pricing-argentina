@@ -16,7 +16,6 @@ suppressPackageStartupMessages({
   library(data.table)
   library(fs)
   library(jsonlite)
-  library(sf)          # section 3, distance to the nearest refinery
 })
 
 source("code/00_config.R")
@@ -63,10 +62,16 @@ GJ   <- function(u) tryCatch(jsonlite::fromJSON(u), error = function(e) NULL)
 
 # Clean an address: drop parentheses and neighborhood suffixes, expand abbreviations
 limpia_dir <- function(x){
-  s <- norm(x)
+  # Remove the number sign before transliterating. Otherwise iconv turns the
+  # ordinal into an "o", the pattern stops matching, and "NO 799" stays glued
+  # to the street name. Section 2 handles it the same way.
+  s0 <- as.character(x)
+  s0 <- gsub("Â", "", s0)                          # mojibake in the source data
+  s0 <- gsub("N[º°]", " ", s0)
+  s0 <- gsub("\\bNro\\.?\\b", " ", s0, ignore.case = TRUE)
+  s <- norm(s0)
   s <- gsub("\\(.*?\\)", " ", s)                 # "(esq. R. Carrillo)"
   s <- gsub("\\s+-\\s+[A-Z ]+$", " ", s)         # " - BANFIELD"
-  s <- gsub("N[º°]|NRO\\.?", " ", s)
   s <- gsub("\\bAVDA\\.?\\b|\\bAV\\.", "AV ", s)
   s <- gsub("\\bGRAL\\.?\\b", "GENERAL ", s)
   s <- gsub("\\bBV\\.?\\b|\\bBVAR\\.?\\b", "BOULEVARD ", s)
@@ -410,14 +415,12 @@ cat("\nSecond pass done. Rescued:", n_ok, "of", nrow(pend), "\n")
 # coordinates, so that copy is the one to use.
 # Sections 4 to 6 below edit geocodificacion_final.csv in place.
 
-sf::sf_use_s2(TRUE)
 options(timeout = 60)
 
 GEO1  <- file.path(DIR, "geocodificacion_estaciones.csv")
 GEO2  <- file.path(DIR, "geocodificacion_pass2.csv")
 CENTL <- file.path(DIR, "centroides_localidad.csv")
 FINAL <- file.path(DIR, "geocodificacion_final.csv")
-OUT_E <- file.path(DIR, "variables_espaciales_estacion.csv")
 norm <- function(x) toupper(trimws(iconv(as.character(x), "", "ASCII//TRANSLIT")))
 GJ   <- function(u) tryCatch(jsonlite::fromJSON(u), error = function(e) NULL)
 
@@ -483,28 +486,10 @@ cat(sprintf("Located (exact or locality): %d (%.1f%%)\n",
             sum(g$precision %in% c("exacta","localidad")),
             100*mean(g$precision %in% c("exacta","localidad"))))
 
-# 3.5 Distance to the nearest refinery (exact and locality levels) ----
-# Refinery coordinates are approximate (two decimals).
-# The eight refineries that supplied the domestic market over the sample. San
-# Lorenzo (Oil Combustibles) is needed to place the OIL brand family, and
-# leaving it out overstated the distance for stations in Santa Fe.
-# Coordinates are at locality level, off by a few km. That is immaterial for
-# distances of hundreds of km, but should be checked before any finer use.
-REF <- data.table(
-  refineria = c("La Plata (YPF)","Luján de Cuyo (YPF)","Plaza Huincul (YPF)",
-                "Dock Sud (Raízen/Shell)","Campana (Axion/PAE)",
-                "Bahía Blanca (Trafigura/Puma)","Campo Durán (Refinor)",
-                "San Lorenzo (Oil)"),
-  lat = c(-34.86, -33.03, -38.93, -34.65, -34.17, -38.75, -22.20, -32.72),
-  lon = c(-57.90, -68.88, -69.20, -58.34, -58.96, -62.27, -63.70, -60.75))
-ub <- g[precision %in% c("exacta","localidad") & !is.na(lat)]
-pe <- st_as_sf(ub, coords = c("lon","lat"), crs = 4326)
-pr <- st_as_sf(REF, coords = c("lon","lat"), crs = 4326)
-idx <- st_nearest_feature(pe, pr)
-ub[, `:=`(refineria_cercana = REF$refineria[idx],
-          d_refineria_km = round(as.numeric(st_distance(pe, pr[idx,], by_element = TRUE))/1000, 1))]
-fwrite(ub[, .(nro_inscripcion, precision, refineria_cercana, d_refineria_km)], OUT_E, na = "NA", bom = TRUE)
-cat("\nDistance to refinery recomputed for", nrow(ub), "located stations (exact or locality)\n")
+# The distance to the nearest refinery is not computed here. Sections 4 to 6
+# still move coordinates, so anything derived from them now would be out of
+# date; section 1 of 08_station_variables.R computes it once the coordinates
+# are final, and writes variables_espaciales_estacion.csv.
 
 # 4. Audit of exact matches ----
 
@@ -841,7 +826,8 @@ haversine <- function(lat1, lon1, lat2, lon2){
 }
 
 g  <- fread(FIN, encoding="UTF-8")
-co <- fread(CO,  encoding="UTF-8")[!is.na(olat)]
+co <- fread(CO, encoding = "UTF-8")[!is.na(olat) & !is.na(olon) &
+                                    olat %between% c(-56, -21) & olon %between% c(-74, -53)]
 cat("Official coordinates available:", nrow(co), "stations\n")
 
 # For information only: distance between the geocoded and the official point for
@@ -858,6 +844,8 @@ if (nrow(v)) {
 # coordinate; exact matches are not touched
 antes <- g[, .N, by=precision][order(-N)]
 g <- merge(g, co[, .(nro_inscripcion=idempresa, olat, olon)], by="nro_inscripcion", all.x=TRUE)
+# Only coordinates inside the country are used, and only for the stations
+# the cascade left without an exact match.
 fill <- !is.na(g$olat) & g$precision != "exacta"
 g[fill, `:=`(lat=olat, lon=olon, fuente="energia_oficial", precision="exacta",
              km_al_centroide=NA_real_, detalle="coord oficial Energia (Res 314/2016)")]
