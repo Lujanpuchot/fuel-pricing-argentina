@@ -97,13 +97,13 @@ Variable names and data values follow the source, which is in Spanish. These are
 | `gas oil` | Diesel. `Grado 2` is the standard grade, `Grado 3` the premium one |
 | `GNC` | Compressed natural gas, sold by the cubic metre and with its own volume scale |
 | `GLPA` | Bottled liquefied petroleum gas |
-| `PRVE` | Outlets in the Energy Secretariat's programme of subsidised rural supply points |
+| `PRVE` | Part of the source category "Bocas de expendio (venta por menor) Combustibles Líquidos + PRVE". The source does not expand the acronym, and the sales-channel text never contains it, so `05_business_type.R` never re-infers this type |
 | `canal_de_comercializacion` | Sales channel. `Al público` is retail; the others are resale and distribution |
 | `tipo_negocio` | Type of outlet, inferred from the products it sells when the source gives the generic label |
 | `excentos` | Flag for the tax-exempt part of a sale, which the source reports on its own line |
 | `no_movimientos` | Flag for a month in which the outlet reported no activity |
 | `tasa_vial`, `ingresos_brutos`, `fondo_fiduciario_gnc` | Road levy, provincial turnover tax and the CNG trust fund, three of the taxes reported per record |
 | `precio_surtidor` | Posted pump price. `precio_sin_impuestos` is the same price net of taxes, which is the one used |
-| `forma_vertical` | Contract between the refiner and the outlet: `RED_PROPIA` is company-operated, `MOSO` is dealer-operated under the brand |
+| `forma_vertical` | Who operates the outlet, taken from the brands' own station locators: the `RED_PROPIA` field for YPF (company-operated against dealer) and the `MOSO` field for Axion (DODO, CORS, CODO, CLDO). It is the observed counterpart of the contract type the model needs |
 | `localidad`, `departamento`, `provincia` | Locality, department and province. Departments are the markets of the model |
 | `precision` | Quality of a geocoded coordinate: `exacta`, `localidad`, `departamento` or `sin_dato` |
