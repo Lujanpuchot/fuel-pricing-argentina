@@ -104,6 +104,6 @@ Variable names and data values follow the source, which is in Spanish. These are
 | `no_movimientos` | Flag the source reports per record; it is carried through the panel and compared when deduplicating |
 | `tasa_vial`, `ingresos_brutos`, `fondo_fiduciario_gnc` | Road levy, provincial turnover tax and the CNG trust fund, three of the taxes reported per record |
 | `precio_surtidor` | Posted pump price. `precio_sin_impuestos` is the same price net of taxes, which is the one used |
-| `forma_vertical` | Who operates the outlet, taken from the brands' own station locators: the `RED_PROPIA` field for YPF (company-operated against dealer) and the `MOSO` field for Axion (DODO, CORS, CODO, CLDO). It is the observed counterpart of the contract type the model needs |
+| `forma_vertical` | Who operates the outlet, taken from the brands' own station locators: the `RED_PROPIA` field for YPF (company-operated against dealer) and the `MOSO` field for Axion, whose values are DODO, CORS and CODO. It is the observed counterpart of the contract type the model needs |
 | `localidad`, `departamento`, `provincia` | Locality, department and province. Departments are the markets of the model |
 | `precision` | Quality of a geocoded coordinate: `exacta`, `localidad`, `departamento` or `sin_dato` |
