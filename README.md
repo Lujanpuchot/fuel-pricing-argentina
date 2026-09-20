@@ -12,13 +12,33 @@ This repository contains the data work the estimation builds on: the station-lev
 
 *Price of YPF against the large private brands, compared within the same locality and month, so the gap is not driven by where each brand sits. The thick line is the mean of each period; the faint one is the median across localities, month by month. Periods are labelled by what the government did with pump prices, and coloured by whether it set them: the one period it did not is the only one in which YPF does not sell below the private brands. Ownership and policy cannot be separated here, since YPF was privately owned only in years when prices were also being negotiated with the government, which is why the thesis identifies the weight on consumer surplus from the pricing conditions rather than from this comparison. Deregulation is dated from October 2017 and the block still contains the freeze agreed in May 2018. The unbranded outlets, not drawn, sit above the large private brands in every period, by 0.6 to 4 percent. Drawn by `code/figure_readme.R`.*
 
-## What the thesis adds
+## Why this case
 
-Three things, and the third is the point. The weight λ is estimated rather than assumed or tested on a grid, and estimated separately for each government, so "was the company used to hold prices down" becomes a number per administration with a band around it. Cost is measured outside the model, in layers, because recovering it by inverting the pricing condition would drive λ to zero by construction. And the estimates end in pesos per litre: how much margin YPF gave up, and how much of it reached consumers once the private brands are allowed to re-optimize against a YPF that no longer holds its price down.
+Governments own firms that compete with private ones in fuel, electricity, banking and air travel across much of the world, and the standard defence of that ownership is that a state firm disciplines the market from inside. The claim is easy to make and hard to check, because it needs the firm's objective, and the objective is what economists usually assume rather than measure. The empirical literature has mostly looked at public monopolies, or at a public option entering a market, where the comparison with a private firm in the same conditions is not available.
+
+Argentina's retail fuel market offers that comparison. YPF sells a little over half the gasoline and diesel bought at the pump and competes product by product, street by street, with Shell, Axion and Puma under the same costs and the same taxes. It was privately controlled until 2012 and state-controlled after, inside a single panel, and prices were administered in some years and free in others. The same firm, the same markets, ownership and regulation moving on different dates: enough to ask whether the firm prices differently because of who owns it, and how much that is worth to the people who buy from it.
 
 Ownership and the pricing regime changed on different dates, which is what lets them be told apart. Prices were administered both while Repsol controlled YPF and after the state took it over in 2012, so ownership moves with the regime held fixed; the state kept the company through the deregulation of 2017-2019, so the regime moves with ownership held fixed. The case the period does not contain is a privately controlled YPF facing free prices. Three of the four cells are observed and the fourth is not, which is why the front-page figure is read as a description and not as an identification.
 
+## What the thesis answers
+
+One parameter carries all of it. Write YPF's objective as profit plus $\lambda$ times consumer surplus; its margin is then $(1-\lambda)$ times the margin a pure profit maximizer would charge with the same demand and the same cost. Five questions follow, and the thesis is the attempt to answer them:
+
+1. **Does YPF give up margin, and how much?** Private brands in the same markets are the benchmark, and also the placebo: their weight should be zero.
+2. **Is it the government or is it ownership?** $\lambda$ is estimated for each administration, and the two changed on different dates.
+3. **Where does it happen?** Departments where YPF is the only brand, against those where it competes.
+4. **Through which channel?** The pump price at the stations YPF prices itself, or the wholesale price charged to the dealers who price their own.
+5. **What is it worth, and to whom?** The margin given up and the part of it that reaches consumers, in pesos per litre, against a counterfactual in which YPF maximizes profit and the private brands re-optimize.
+
+## What it does not answer
+
+Regulation enters as context: it defines the periods and is described, not given a parameter of its own. Whether state control and price regulation are substitutes or complements therefore stays open, and so does the wholesale bargaining the design once had. Both are filed as [issues](https://github.com/Lujanpuchot/fuel-pricing-argentina/issues) rather than promised here.
+
 A fourth piece did not survive contact with the data. The design also had the discount negotiated between YPF and its dealers and split along the chain with a Nash-in-Nash bargaining model. Its prediction failed before anything was estimated: the wholesale gap between YPF and the private brands is widest under regulation, about 5 percent, and narrows to about 2 percent in the windows when prices were free, which is the reverse of what the model implied. No bargaining model is estimated. What is left of it is a descriptive decomposition of where YPF's discount sits in the chain, and the contract rules that say whose pricing condition applies to each station.
+
+## What the thesis adds
+
+Three things, and the third is the point. The weight λ is estimated rather than assumed or tested on a grid, and estimated separately for each government, so "was the company used to hold prices down" becomes a number per administration with a band around it. Cost is measured outside the model, in layers, because recovering it by inverting the pricing condition would drive λ to zero by construction. And the estimates end in pesos per litre: how much margin YPF gave up, and how much of it reached consumers once the private brands are allowed to re-optimize against a YPF that no longer holds its price down.
 
 ## Where YPF is the only brand
 
@@ -65,6 +85,7 @@ code/
   08_station_variables.R      rivals, distances, highway and border indicators
   09_market_data.R            population, wages, prices and costs by market
   10_descriptives.R           tables and figures
+  11_demand_sample.R          the product-market file the demand model needs
   figure_readme.R             the figures on the front page, in English
   diagnostics_data_quality.R  how the cleaning thresholds were chosen
 data/                         the crosswalk, the geocoding reference tables and the 20-F extract
@@ -140,7 +161,9 @@ Variable names follow the source data and are in Spanish. Comments are in Englis
 
 ## Status
 
-The panel, the geocoding, the covariates and the descriptive analysis are complete. Demand and supply estimation is in progress and its code will be added as it stabilizes.
+The panel, the geocoding, the market covariates and the descriptive and event evidence are done, and this repository is that work. Demand comes next: `11_demand_sample.R` assembles the product-market file the demand model is estimated on, and the estimation itself runs in PyBLP. The supply regressions follow from it, since every margin needs the markup the demand estimates imply.
+
+Six decisions about the data are still open and are listed in [docs/open_issues.md](docs/open_issues.md), with the evidence behind each one. The one that blocks the quantity side is the group of outlets that report volume in litres.
 
 ## Use
 
