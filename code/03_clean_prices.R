@@ -4,6 +4,18 @@
 #
 # Input:  eess_all_cleaned3_cut.rds
 # Output: eess_all_cleaned4_cut.rds
+#
+# Prices are in nominal pesos per litre, as the outlet reported them. The
+# cutoffs are absolute levels rather than percentiles, so they have to hold over
+# twenty years in which the nominal price rose by orders of magnitude; section 5
+# prints the median and both tails year by year, which is what the levels are
+# read against. The rule is meant to catch corrupt records, not expensive or
+# cheap ones.
+#
+# Sections 1 to 5 diagnose, sections 6 to 9 build the flags one band at a time
+# and count them, and sections 10 to 12 settle on a rule, apply it and save. The
+# evidence behind the cutoffs is in diagnostics_data_quality.R, which is not
+# part of the pipeline.
 
 library(data.table)
 library(fs)
@@ -26,6 +38,11 @@ cat("Columns:", ncol(eess_all_cleaned3_cut), "\n")
 
 # 1. Basic check of the price variable ----
 
+# The panel carries three price columns, all still stored as text at this point:
+# the pump price, the price with taxes and the price net of taxes. Only the last
+# one is cleaned here, because it is the price the demand and supply models use;
+# the other two are left exactly as they came.
+
 var_precio <- "precio_sin_impuestos"
 
 if (!var_precio %in% names(eess_all_cleaned3_cut)) {
@@ -41,7 +58,9 @@ print(head(eess_all_cleaned3_cut[[var_precio]], 20))
 # 2. Numeric version ----
 
 # The original column is left untouched: a trimmed text copy and a numeric
-# version are added as new columns.
+# version are added as new columns. A zero price is written "0E-7" in the
+# source, which as.numeric() reads as 0, so the zeros of section 6 are genuine
+# zeros and not a parsing artefact.
 eess_all_cleaned3_cut[, precio_sin_impuestos_chr := trimws(as.character(get(var_precio)))]
 
 eess_all_cleaned3_cut[, precio_sin_impuestos_num := suppressWarnings(
@@ -49,6 +68,12 @@ eess_all_cleaned3_cut[, precio_sin_impuestos_num := suppressWarnings(
 )]
 
 # 3. Conversion diagnostics ----
+
+# One row of counts that says whether anything was lost going from text to
+# number: blanks, decimal commas, inner spaces, strings that failed to parse,
+# and how many prices come out zero, negative or positive.
+# n_no_parseados_no_triviales is the figure to watch, since a non-zero value
+# there would mean the numeric column is missing prices that the source records.
 
 # Values that fail to parse and are not one of the usual missing-value codes
 parse_fail <- eess_all_cleaned3_cut[
@@ -87,6 +112,13 @@ if (nrow(parse_fail) > 0) {
 }
 
 # 4. Distribution of the numeric price ----
+
+# Where the mass of the variable sits and how far each tail reaches. The
+# quantile grid is deliberately fine at both ends, out to the 0.01th and the
+# 99.9th percentile, because the values this script is after are too rare to
+# show up between ordinary deciles. The table of the most frequent raw strings
+# does the same job from the other side: a corrupt value that repeats thousands
+# of times is a coding convention, not a typing slip.
 
 cat("\nClass of the numeric version:\n")
 print(class(eess_all_cleaned3_cut$precio_sin_impuestos_num))
@@ -128,6 +160,11 @@ print(
 
 # 5. Summary by year ----
 
+# Nominal prices climb by orders of magnitude over the sample, so a level that
+# is absurd in 2005 is unremarkable in 2024. This table is what the absolute
+# cutoffs of section 6 have to be read against, and it also shows in which years
+# the zeros and the very large values are concentrated.
+
 # anio is rebuilt from periodo if the column is not there
 if (!"anio" %in% names(eess_all_cleaned3_cut)) {
   if ("periodo" %in% names(eess_all_cleaned3_cut)) {
@@ -157,6 +194,17 @@ cat("\nSummary by year:\n")
 print(res_anio_precio)
 
 # 6. Flags for extreme prices ----
+
+# Six flags, built one at a time rather than as a single condition: exact zeros,
+# prices of 0.01 or less, prices in (0.01, 0.1], and prices above 100,000, above
+# one million and above ten million pesos per litre. The three high ones are
+# nested, so they measure how far the upper tail reaches instead of splitting it
+# into bands. Counting them apart in section 7 is what decides which ones the
+# removal rule ends up covering.
+#
+# None of the flags covers negative prices: every one of them requires the price
+# to be positive. diag_precio$n_negativos, from section 3, reports how many
+# there are.
 
 if (!"precio_sin_impuestos_num" %in% names(eess_all_cleaned3_cut)) {
   stop("precio_sin_impuestos_num does not exist. Run the conversion block first.")
@@ -192,13 +240,21 @@ eess_all_cleaned3_cut[, flag_precio_alto_10m :=
                         !is.na(precio_sin_impuestos_num) &
                         precio_sin_impuestos_num > 10000000]
 
-# First, cautious removal rule (v1): zero, (0, 0.01] or above 100,000
+# First, cautious removal rule (v1): zero, (0, 0.01] or above 100,000. Only one
+# of the three high bands enters the rule; the one-million and ten-million flags
+# are counted below but never used to remove anything.
 eess_all_cleaned3_cut[, flag_precio_remove_v1 :=
                         flag_precio_cero |
                         flag_precio_muy_bajo |
                         flag_precio_alto_100k]
 
 # 7. Flag counts: overall, by year and by product ----
+
+# What each band would cost, in total, by year and by product. Two things are
+# being watched: whether any band is large enough to bias the panel if it is
+# removed, and whether the flagged rows sit in one period or one fuel, which
+# would point at a reporting convention rather than at scattered errors. The
+# product table is ordered by n_remove_v1, so the worst products come first.
 
 res_flags_global <- eess_all_cleaned3_cut[, .(
   n_total = .N,
@@ -244,6 +300,12 @@ print(res_flags_producto)
 
 # 8. Examples of flagged records ----
 
+# The flagged rows themselves, the low ones and the high ones, printed with
+# period, province, outlet, product, channel and volume. Counts alone cannot say
+# whether a band is a data-entry problem or a real price, and these columns can:
+# they show whether a flagged price comes with a plausible volume and whether it
+# repeats at the same outlet.
+
 ej_bajos <- eess_all_cleaned3_cut[
   flag_precio_cero | flag_precio_muy_bajo | flag_precio_bajo_sospechoso,
   .(
@@ -269,6 +331,11 @@ cat("\nFirst examples of prices > 100000:\n")
 print(ej_altos_100k[1:100])
 
 # 9. Frequency table by price band ----
+
+# The whole distribution laid out in bands, from exact zero to above one
+# million, which puts the counts of section 7 in proportion to the rest of the
+# panel. The bands are tested in order after the zero test, so a negative price
+# would be counted in "(0,0.01]".
 
 eess_all_cleaned3_cut[, banda_precio_extremos := fifelse(
   is.na(precio_sin_impuestos_num), NA_character_,
@@ -296,6 +363,11 @@ print(tabla_bandas)
 
 # 10. Tentative clean variable (v1) ----
 
+# The v1 rule applied to a copy of the price, to see what it does to the number
+# of usable observations and to the mean, median and maximum. The median should
+# hardly move; the mean and the maximum should, and by how much says how far the
+# extreme values were pulling the pooled statistics.
+
 # In memory only; nothing is saved at this step
 eess_all_cleaned3_cut[, precio_sin_impuestos_clean_v1 := precio_sin_impuestos_num]
 eess_all_cleaned3_cut[flag_precio_remove_v1 == TRUE, precio_sin_impuestos_clean_v1 := NA_real_]
@@ -315,6 +387,12 @@ cat("\nOriginal vs clean_v1:\n")
 print(comparacion_clean_v1)
 
 # 11. Final removal flag (v2) and filtered panel ----
+
+# v2 is the rule the script applies: zeros, every positive price of 0.1 pesos
+# per litre or less, and prices above 100,000. The rows are dropped rather than
+# blanked, and the auxiliary columns built above do not travel with them, so the
+# panel that leaves the script has the same columns as the one that came in and
+# only fewer rows.
 
 # v2 adds the (0.01, 0.1] range to the v1 rule
 eess_all_cleaned3_cut[, flag_precio_remove_v2 :=
@@ -349,7 +427,9 @@ cat("\nNew data set created in memory: eess_all_cleaned3_cut_preciofiltrado\n")
 cat("Rows:", nrow(eess_all_cleaned3_cut_preciofiltrado), "\n")
 cat("Columns:", ncol(eess_all_cleaned3_cut_preciofiltrado), "\n")
 
-# Rebuild the numeric price only to check the result
+# Rebuild the numeric price only to check the result. The counts below are the
+# ones that should now be zero: no price at zero, none at 0.1 or less, none
+# above 100,000.
 eess_all_cleaned3_cut_preciofiltrado[
   , precio_sin_impuestos_num_check := suppressWarnings(as.numeric(as.character(precio_sin_impuestos)))
 ]
@@ -372,6 +452,10 @@ print(check_final_precio)
 eess_all_cleaned3_cut_preciofiltrado[, precio_sin_impuestos_num_check := NULL]
 
 # 12. Save ----
+
+# The filtered panel is written, read back and checked for row and column
+# counts, then written a second time under its cleaned4 name. Both saves go to
+# the same path and carry the same contents.
 
 DIR_DATASETS <- DIR_INTERIM
 FILE_OUT <- fs::path(DIR_DATASETS, "eess_all_cleaned4_cut.rds")

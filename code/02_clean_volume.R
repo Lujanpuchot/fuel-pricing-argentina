@@ -6,6 +6,17 @@
 # Output: eess_all_cleaned1.rds, eess_all_working_with_aux.rds,
 #         eess_all_cleaned2.rds, eess_all_cleaned2_cut.rds,
 #         eess_all_cleaned3_cut.rds
+#
+# Volume is reported in cubic metres, by outlet, product, sales channel and
+# month. Every cutoff below is in those units.
+#
+# Sections 1 to 6 do not change a single value: they describe the raw variable
+# and build outlier flags at three levels of aggregation, pooled, by product,
+# and by product and business type, to find out where the implausible volumes
+# sit. The two rules that are actually applied come next, one for GNC in
+# section 7 and one for liquid fuels in section 8, and sections 9 to 11 write
+# the files. The evidence behind the cutoffs is in diagnostics_data_quality.R,
+# which is not part of the pipeline.
 
 library(data.table)
 library(fs)
@@ -19,6 +30,12 @@ eess_all <- readRDS(fs::path(DIR_DATASETS, "eess_all_rawbind_2.rds"))
 setDT(eess_all)
 
 # 1. Raw volumen: diagnostics ----
+
+# volumen arrives as text. Before parsing it, this part establishes what the
+# strings actually look like: how the source spells a missing value ("N/D",
+# "ND", "-", an empty string), whether decimal commas or thousands separators
+# turn up, and which raw values are most frequent. That is what decides whether
+# a custom parser is needed or plain as.numeric() will do.
 
 cat("\nInitial diagnostics of volumen\n")
 cat("Class of 'volumen': ", class(eess_all$volumen), "\n")
@@ -52,10 +69,19 @@ print(head(sort(table(vol_chr), decreasing = TRUE), 30))
 # 2. Parse to numeric ----
 
 # volumen is stored as character, but in a format that as.numeric() reads
-# directly (e.g. "21.9920000", "0E-7"), so no custom parser is needed.
+# directly (e.g. "21.9920000", "0E-7"), so no custom parser is needed. "0E-7" is
+# how the source writes an exact zero, and it parses to 0 rather than to a tiny
+# positive number.
 eess_all[, volumen_num := suppressWarnings(as.numeric(vol_chr))]
 
 # 3. Diagnostics of the parsed variable ----
+
+# Checks that the conversion lost nothing that matters, and maps the shape of
+# the variable before any rule is written. Three questions: which strings became
+# NA although they are not one of the usual missing-value codes, where the mass
+# of the distribution sits, and how far the two tails reach. The breakdowns by
+# month, by product and by product x channel are there to see whether the
+# problems concentrate in a period, a fuel or a way of selling it.
 
 cat("\nAfter conversion to numeric\n")
 cat("Class of 'volumen_num': ", class(eess_all$volumen_num), "\n")
@@ -88,12 +114,20 @@ print(quantile(
   na.rm = TRUE
 ))
 
+# Zeros are worth watching: none of the rules in this script touches them, and
+# they only leave the panel with the cut in section 11.
 cat("\nBasic counts:\n")
 cat("Volume = 0: ", eess_all[volumen_num == 0, .N], "\n")
 cat("Volume < 0: ", eess_all[volumen_num < 0, .N], "\n")
 cat("Volume > 0: ", eess_all[volumen_num > 0, .N], "\n")
 cat("Volume NA: ", eess_all[is.na(volumen_num), .N], "\n")
 
+# Both tails, with the station, product, channel and source file attached. The
+# columns are what make the rows readable: an absurd value that repeats at one
+# station, in one product, or in one source file is a reporting problem rather
+# than a stray keystroke. Negative volumes get a print of their own: no flag in
+# this script tests for them, and like the zeros they only leave the panel with
+# the cut in section 11.
 cat("\nExtremes of volumen_num\n")
 
 cat("\n20 largest values:\n")
@@ -120,7 +154,8 @@ print(
   ][1:20]
 )
 
-# By month
+# By month, which shows whether missing values and zeros cluster in particular
+# periods or source files rather than running evenly through the sample
 volumen_diag_mes <- eess_all[
   , .(
     n = .N,
@@ -149,7 +184,9 @@ print(head(volumen_diag_mes, 20))
 cat("\nVolume by month (last months):\n")
 print(tail(volumen_diag_mes, 20))
 
-# By product, the breakdown that is economically meaningful
+# By product, the breakdown that is economically meaningful. A cubic metre of
+# GNC and a cubic metre of gasoline are not comparable quantities of sales, so
+# this is the table the cutoffs are built on.
 volumen_diag_producto <- eess_all[
   , .(
     n = .N,
@@ -177,7 +214,9 @@ volumen_diag_producto[!is.finite(max_vol), max_vol := NA_real_]
 cat("\nSummary by product:\n")
 print(volumen_diag_producto)
 
-# By product x sales channel (canal_de_comercializacion)
+# By product x sales channel (canal_de_comercializacion). The channel separates
+# retail sales to the public from resale to other stations and from sales to
+# distributors, which move volumes of a different order.
 volumen_diag_prod_canal <- eess_all[
   , .(
     n = .N,
@@ -201,7 +240,9 @@ volumen_diag_prod_canal[!is.finite(max_vol), max_vol := NA_real_]
 cat("\nSummary by product and channel (30 largest cells):\n")
 print(volumen_diag_prod_canal[1:30])
 
-# Do all rows with product "N/D" have zero volume?
+# Do all rows with product "N/D" have zero volume? "N/D" is a row with no
+# product recorded, and every cutoff from section 4 on leaves it out, so what it
+# holds has to be checked here or not at all.
 eess_all[
   producto == "N/D",
   .(
@@ -220,7 +261,9 @@ eess_all[
   by = producto
 ][order(-N)]
 
-# GNC (compressed natural gas) on its own
+# GNC (compressed natural gas) on its own, out to the 99.9th percentile. It is
+# singled out because it ends up with a cleaning rule of its own in section 7,
+# separate from the one the liquid fuels get.
 eess_all[
   producto == "GNC",
   .(
@@ -237,7 +280,13 @@ eess_all[
 
 # 4. Outliers by product ----
 
-# Outliers are defined within product, never on the pooled distribution.
+# Outliers are defined within product, never on the pooled distribution: the
+# products sit at scales too different for a common cutoff, GNC above all.
+#
+# None of the flags built in this section is applied to the data. They serve to
+# find the stations, products and periods that produce the extreme values; the
+# rules that do set volumes to NA are built in sections 7 and 8.
+#
 # Upper percentiles and median by product (N/D excluded):
 vol_cutoffs_prod <- eess_all[
   !is.na(volumen_num) & producto != "N/D",
@@ -276,7 +325,9 @@ outliers_por_estacion <- eess_all[
 
 print(outliers_por_estacion[1:30])
 
-# Full history of two suspicious stations
+# Full history of two suspicious stations. Reading the whole series tells apart
+# a station that reports one absurd month from one whose level is wrong
+# throughout.
 eess_all[
   nro_inscripcion %in% c(8651, 4153)
 ][order(nro_inscripcion, producto, periodo_dt),
@@ -286,7 +337,10 @@ eess_all[
 ]
 
 # Stricter flag for clearly absurd values: more than 10 times the product's
-# 99.99th percentile, plus an absolute cap of 1e9 for GNC
+# 99.99th percentile, plus an absolute cap of 1e9 for GNC. The first rule is
+# relative to the product's own distribution; the second is an absolute one,
+# marking any GNC row above 1e9 cubic metres whatever that distribution looks
+# like.
 eess_all[, flag_absurdo_prod := !is.na(volumen_num) & !is.na(p9999) & volumen_num > 10 * p9999]
 
 eess_all[, flag_absurdo_gnc := producto == "GNC" & !is.na(volumen_num) & volumen_num > 1e9]
@@ -306,11 +360,23 @@ print(absurdos[1:100])
 
 # 5. High volumes by product, business type and year ----
 
+# The same exercise as section 4, now cut by tipo_negocio (business type) and by
+# year. Some outlets are wholesalers or distributors and move large volumes
+# legitimately, so before calling a value absurd it is worth knowing whether the
+# large volumes belong to them, and whether they are spread over the sample or
+# concentrated in a few years.
+#
+# The product cutoffs are computed again here under new names (p99_prod,
+# p999_prod, p9999_prod) and joined onto the panel a second time, so both sets
+# of columns end up in it.
+
 library(data.table)
 
 stopifnot("producto" %in% names(eess_all))
 stopifnot("volumen_num" %in% names(eess_all))
 
+# anio (year) is derived from whichever period variable the panel carries, so
+# the section also runs on a panel that arrives without it
 if (!"anio" %in% names(eess_all)) {
   if ("periodo_dt" %in% names(eess_all)) {
     eess_all[, anio := as.integer(format(periodo_dt, "%Y"))]
@@ -369,7 +435,9 @@ eess_all[, flag_hi_p999 := !is.na(volumen_num) & !is.na(p999_prod) & volumen_num
 eess_all[, flag_hi_p9999 := !is.na(volumen_num) & !is.na(p9999_prod) & volumen_num > p9999_prod]
 
 # Absurd: more than 10 times the 99.99th percentile of the product, or more
-# than 1,000 times its median
+# than 1,000 times its median. The two rules catch different things, a value far
+# beyond a tail that is already long and a value out of all proportion to a
+# typical month, and either one is enough.
 eess_all[, flag_absurdo_10xp9999 := !is.na(volumen_num) & !is.na(p9999_prod) & volumen_num > 10 * p9999_prod]
 
 eess_all[, flag_absurdo_ratio := !is.na(volumen_num) & !is.na(mediana_prod) & mediana_prod > 0 &
@@ -417,6 +485,8 @@ res_anio_prod_tipo <- eess_all[
 cat("\nSummary by year x product x tipo_negocio\n")
 print(res_anio_prod_tipo)
 
+# The same counts collapsed to one row per year, which is the quickest way to
+# see whether the extremes arrive with a particular period of the source
 res_anio <- eess_all[
   producto != "N/D" & !is.na(volumen_num),
   .(
@@ -465,7 +535,8 @@ extremos_rows <- eess_all[
 cat("\nTop 100 extreme rows\n")
 print(extremos_rows[1:100])
 
-# GNC only
+# GNC only, by year and business type, since it is the product whose tail
+# drives the whole exercise
 res_gnc_anio_tipo <- eess_all[
   producto == "GNC" & !is.na(volumen_num),
   .(
@@ -503,6 +574,12 @@ print(detalle_sospechosas[1:200])
 
 # 6. Outliers within product x business type ----
 
+# The finest grouping the flags use. Cutoffs are recomputed inside each
+# product x business type cell, so a distributor's normal month is measured
+# against other distributors and not against retail stations. flag_absurdo_pt is
+# the working flag from here on: sections 7 and 8 narrow it down before anything
+# is set to NA.
+
 vol_cutoffs_prod_tipo <- eess_all[
   producto != "N/D" & !is.na(volumen_num),
   .(
@@ -528,9 +605,14 @@ eess_all[, flag_absurdo_ratio_pt := !is.na(volumen_num) & !is.na(mediana_pt) & m
 eess_all[, flag_absurdo_10xp9999_pt := !is.na(volumen_num) & !is.na(p9999_pt) &
            volumen_num > 10 * p9999_pt]
 
-# Conservative final flag: either rule
+# Conservative final flag: either rule. Conservative in the sense of flagging
+# generously, since nothing is removed on the strength of this flag alone.
 eess_all[, flag_absurdo_pt := flag_absurdo_ratio_pt | flag_absurdo_10xp9999_pt]
 
+# How much the finer grouping changes the picture: the same shares of flagged
+# rows as in section 5, now computed against the product x business type
+# cutoffs. A cell whose share of absurd rows drops sharply was one where the
+# product cutoff had been the wrong yardstick.
 res_prod_tipo_nuevo <- eess_all[
   producto != "N/D" & !is.na(volumen_num),
   .(
@@ -596,12 +678,21 @@ eess_all[
 
 # 7. GNC: implausibly large volumes ----
 
+# GNC carries the worst of the tail, and no percentile rule handles it well, so
+# two candidate rules are written out and compared before one is kept. Option A
+# removes everything flag_absurdo_pt marks, which is a lot; option A2 keeps only
+# an absolute cutoff and removes the values that cannot be a month of sales on
+# any reading. A2 is the one applied.
+
 # Option A: every GNC value flagged as absurd becomes NA
 eess_all[, flag_gnc_absurda := producto == "GNC" & flag_absurdo_pt == TRUE]
 
 eess_all[, volumen_num_limpio_A := volumen_num]
 eess_all[flag_gnc_absurda == TRUE, volumen_num_limpio_A := NA_real_]
 
+# How many values each option costs, by product. n_eliminados_A counts only the
+# volumes that were present and become NA, not the ones that were missing to
+# begin with.
 eess_all[
   , .(
     n_total = .N,
@@ -639,7 +730,7 @@ gnc_absurdas_estacion <- eess_all[
 print(gnc_absurdas_estacion)
 
 # Option A2: only truly huge GNC values. The second condition is a subset of the
-# first, so the rule amounts to GNC volumes of 1e9 or more.
+# first, so the rule amounts to GNC volumes of 1e9 cubic metres or more.
 eess_all[, flag_gnc_monstruosa := producto == "GNC" & (
   volumen_num >= 1e9 |
     (flag_absurdo_pt == TRUE & volumen_num >= 1e10)
@@ -658,6 +749,9 @@ eess_all[
   by = producto
 ][order(-n_eliminados_A2)]
 
+# The stations and rows option A2 would remove, to be read against the option A
+# lists printed above. The gap between the two is what the choice of rule costs
+# or saves.
 gnc_monstruosa_estacion <- eess_all[
   flag_gnc_monstruosa == TRUE,
   .(
@@ -683,7 +777,8 @@ gnc_monstruosa_rows <- eess_all[
 
 print(gnc_monstruosa_rows[1:200])
 
-# Option A2 is the one kept: volumen_num_limpio is rebuilt with it
+# Option A2 is the one kept: volumen_num_limpio is rebuilt with it, discarding
+# the wider version of the flag built at the end of section 6
 eess_all[, flag_gnc_monstruosa := producto == "GNC" & (
   volumen_num >= 1e9 |
     (flag_absurdo_pt == TRUE & volumen_num >= 1e10)
@@ -694,6 +789,11 @@ eess_all[flag_gnc_monstruosa == TRUE, volumen_num_limpio := NA_real_]
 
 # 8. Liquid fuels: implausibly large volumes ----
 
+# Gasoline, diesel and the smaller liquid products have a tail of their own. It
+# is less extreme than GNC's and harder to separate from genuine large sales,
+# so the section looks first, by product, business type, channel, year and
+# station, and only then writes a rule.
+#
 # Inspection first; nothing is removed in this block
 liquidos <- c(
   "Gas Oil Grado 1",
@@ -708,6 +808,8 @@ liquidos <- c(
   "GLPA"
 )
 
+# Every liquid-fuel row the product x business type rule marks, sorted so that
+# the largest value of each product and group comes first
 liquidos_sospechosos <- eess_all[
   producto %in% liquidos & flag_absurdo_pt == TRUE,
   .(
@@ -719,6 +821,9 @@ liquidos_sospechosos <- eess_all[
 
 print(liquidos_sospechosos[1:200])
 
+# Share of flagged rows by product and business type. A business type in which
+# the share is high across the board is one whose volumes are large by nature,
+# and a candidate for being left out of the rule rather than cleaned by it.
 res_liquidos_tipo <- eess_all[
   producto %in% liquidos,
   .(
@@ -735,6 +840,9 @@ res_liquidos_tipo <- eess_all[
 
 print(res_liquidos_tipo)
 
+# The same rows spread over year, product, business type and channel. Flagged
+# rows bunched in a few years would point at a change in the source rather than
+# at the stations.
 res_liquidos_anio <- eess_all[
   producto %in% liquidos & flag_absurdo_pt == TRUE,
   .(
@@ -746,6 +854,8 @@ res_liquidos_anio <- eess_all[
 
 print(res_liquidos_anio)
 
+# Ranking by station. The ten at the top are followed month by month further
+# down, which is what the narrower rule is written against.
 liq_sospechosas_estacion <- eess_all[
   producto %in% liquidos & flag_absurdo_pt == TRUE,
   .(
@@ -783,7 +893,10 @@ detalle_top_liq <- eess_all[
 
 print(detalle_top_liq[1:300])
 
-# Option B2: remove only the liquid-fuel volumes that are clearly impossible
+# Option B2: remove only the liquid-fuel volumes that are clearly impossible.
+# The rule is a conjunction of the conditions built below, so that it reaches
+# only retail sales to the public that are large in absolute terms and out of
+# proportion to their own group.
 liquidos <- c(
   "Gas Oil Grado 1",
   "Gas Oil Grado 2",
@@ -823,7 +936,9 @@ eess_all[, ratio_mediana_pt := fifelse(
   NA_real_
 )]
 
-# Retail sales to the public
+# Retail sales to the public: tipo_negocio labels of the form
+# "Bocas de expendio (venta por menor) ..." sold through the "Al público"
+# channel. Wholesale rows never enter the rule.
 eess_all[, flag_minorista_publico :=
            grepl("venta por menor", tipo_negocio_std, ignore.case = TRUE) &
            canal_de_comercializacion == "Al público"
@@ -837,8 +952,10 @@ eess_all[, flag_no_mayorista := !grepl(
   ignore.case = TRUE
 )]
 
-# Absolute floor by product family: 1e6 for diesel and gasoline, 1e5 for
-# kerosene, biodiesel and GLPA
+# Absolute floor by product family, in cubic metres per outlet-month: 1e6 for
+# diesel and gasoline, 1e5 for kerosene, biodiesel and GLPA. Nothing below the
+# floor is ever flagged, however far it sits from its group's percentile or
+# median, which is what keeps the ratio rules off ordinary large outlets.
 eess_all[, piso_abs_liq := fifelse(
   producto %in% liq_gas_nafta, 1e6,
   fifelse(producto %in% liq_otros, 1e5, NA_real_)
@@ -846,7 +963,13 @@ eess_all[, piso_abs_liq := fifelse(
 
 # A liquid-fuel volume is flagged only if it is a retail sale to the public by
 # a non-wholesale business, exceeds the floor, and is either more than 10 times
-# the group's 99.99th percentile or more than 5,000 times its median
+# the group's 99.99th percentile or more than 5,000 times its median.
+#
+# The rule is narrow on purpose and a tail survives it: a handful of outlets
+# still report up to hundreds of thousands of cubic metres a month, which look
+# like depot deliveries booked into the retail channel. Section 3 of
+# 10_descriptives.R caps those at 3,000 m3 per outlet-month for the quantity
+# figures; the rule for the model sample is still open.
 eess_all[, flag_liquido_monstruoso :=
            producto %in% liquidos &
            flag_minorista_publico == TRUE &
@@ -904,6 +1027,14 @@ eess_all[
 
 # 9. Save cleaned1 ----
 
+# Two files come out of this section. eess_all_working_with_aux.rds keeps every
+# auxiliary column built above, so the cutoffs and flags can be looked at again
+# without recomputing them, and eess_all_cleaned1.rds keeps only the columns the
+# raw panel had, with the flagged volumes blanked out in the original character
+# variable. cleaned1 is written twice, first with the auxiliary columns and then
+# rewritten with the original ones, so a run interrupted in between leaves the
+# wider version on disk under the cleaned1 name.
+
 # First pass: the panel with every auxiliary column built above
 eess_all_cleaned1 <- copy(eess_all)
 
@@ -935,7 +1066,10 @@ eess_all_aux_from_old_cleaned1 <- readRDS(
 base_original_ref <- readRDS(fs::path(DIR_DATASETS, "eess_all_rawbind_2.rds"))
 vars_originales <- names(base_original_ref)
 
-# Final flag: implausibly large GNC or liquid-fuel volume (NA counts as FALSE)
+# Final flag: implausibly large GNC or liquid-fuel volume (NA counts as FALSE).
+# This is the only volume rule that leaves the script. The intermediate flags of
+# sections 4 to 6 travel with the auxiliary file, but nothing is removed on
+# their own account.
 eess_all_aux_from_old_cleaned1[, flag_extremo_volumen_final :=
   fifelse(is.na(flag_gnc_monstruosa), FALSE, flag_gnc_monstruosa) |
   fifelse(is.na(flag_liquido_monstruoso), FALSE, flag_liquido_monstruoso)
@@ -972,6 +1106,12 @@ colnames(eess_all_cleaned1)
 
 # 10. Very small volumes ----
 
+# The other end of the distribution: positive volumes far below anything a
+# month of sales could be, down to 1e-5 cubic metres and less. They are counted
+# by order of magnitude, product, sales channel and year, so that it is clear
+# whether they are a quirk of one source file or a habit that runs through the
+# sample, and then recoded to zero at the end of the section.
+
 # cleaned1 only keeps the original columns, so the numeric volume is parsed again
 vol_chr <- trimws(as.character(eess_all_cleaned1$volumen))
 eess_all_cleaned1[, volumen_num := suppressWarnings(as.numeric(vol_chr))]
@@ -994,7 +1134,9 @@ eess_all_cleaned1[
 ][order(-N)]
 
 # Distribution of the values in (0, 1] by order of magnitude, overall and by
-# product
+# product. The bands run by powers of ten because that is the scale on which
+# these values differ: a row of 1e-7 and a row of 0.5 cubic metres are not the
+# same kind of problem, and only the first is recoded at the end of the section.
 eess_all_cleaned1[
   !is.na(volumen_num) & volumen_num > 0 & volumen_num <= 1,
   .N,
@@ -1106,7 +1248,9 @@ tiny_examples <- eess_all_cleaned1[
 
 print(tiny_examples[1:100])
 
-# Final numeric volume: values in (0, 1e-5] are recoded to 0
+# Final numeric volume: values in (0, 1e-5] are recoded to 0. The recode makes
+# no difference to the panel that leaves this script, because the cut in
+# section 11 keeps only volumes of 1e-3 and above and so drops every zero too.
 eess_all_cleaned1[, volumen_num_final := volumen_num]
 eess_all_cleaned1[
   !is.na(volumen_num_final) & volumen_num_final > 0 & volumen_num_final <= 1e-5,
@@ -1128,6 +1272,11 @@ eess_all_cleaned1[
 # cleaned3_cut: cleaned2_cut restricted to volumen_num_final >= 1e-3, which drops
 #               57,157 rows (zeros included); volumen is overwritten with the
 #               final numeric value and the two auxiliary columns are removed
+#
+# cleaned3_cut is what the rest of the pipeline reads. In it volumen is numeric,
+# in cubic metres, and strictly positive. The panel therefore holds no zeros, so
+# from here on a month with no row and a month with no sales cannot be told
+# apart.
 
 if (!exists("DIR_DATASETS"))
   DIR_DATASETS <- DIR_INTERIM

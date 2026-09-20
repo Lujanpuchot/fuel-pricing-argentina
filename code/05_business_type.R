@@ -20,6 +20,11 @@ FILE_BASE <- fs::path(DIR_DATASETS, "eess_all_cleaned5_cut.rds")
 # appearance"), each starting again from the panel on disk. Part 7 saves the
 # final panel, which uses the "since first appearance" version.
 # A boca-month is one outlet (nro_inscripcion) in one month (periodo_dt).
+#
+# The inference itself is the same everywhere: the type follows from the
+# products the outlet reports. The alternatives differ in the treatment of time,
+# that is, in whether the type may change from one month to the next and on what
+# grounds.
 
 
 # 1. Diagnosis of tipo_negocio ----
@@ -27,7 +32,9 @@ FILE_BASE <- fs::path(DIR_DATASETS, "eess_all_cleaned5_cut.rds")
 # The source uses the generic label "Estación de servicio" alongside the
 # detailed "Bocas de expendio ..." categories until July 2022 and drops it
 # afterwards. This part lists the labels, gives the first and last period of
-# each and counts the stations that carry both.
+# each and counts the stations that carry both. It also runs the product-based
+# inference once, to see how the generic label would split. Nothing is recoded
+# and nothing is written to disk here.
 
 if (!fs::file_exists(FILE_BASE)) {
   stop("File not found: ", FILE_BASE)
@@ -40,6 +47,7 @@ cat("Panel loaded\n")
 cat("Rows:", nrow(eess_all_cleaned5_cut), "\n")
 cat("Columns:", ncol(eess_all_cleaned5_cut), "\n")
 
+# The four columns everything here turns on
 req_vars <- c("periodo_dt", "nro_inscripcion", "tipo_negocio", "producto")
 stopifnot(all(req_vars %in% names(eess_all_cleaned5_cut)))
 
@@ -56,6 +64,8 @@ norm_txt <- function(x) {
   x
 }
 
+# Work on a copy. The normalized label, product and channel are helper columns
+# for the diagnosis and do not leave this part.
 dt <- copy(eess_all_cleaned5_cut)
 
 dt[, tipo_negocio_raw  := as.character(tipo_negocio)]
@@ -105,6 +115,9 @@ boca_mes_tipo[, grupo_tipo := fifelse(
           "Otros")
 )]
 
+# Outlets per month in each group, and the month total. An outlet with two
+# labels in one month is counted in both groups, so the shares can add to more
+# than one.
 serie_mes <- boca_mes_tipo[
   , .(n_bocas = uniqueN(nro_inscripcion)),
   by = .(periodo_dt, grupo_tipo)
@@ -118,6 +131,9 @@ total_mes <- boca_mes_tipo[
 serie_mes <- total_mes[serie_mes, on = "periodo_dt"]
 serie_mes[, share := n_bocas / total_bocas]
 
+# One row per month, with counts and shares of the three groups side by side.
+# Both ends of the series are printed, to see the mix of labels before and after
+# the source stops using the generic one.
 serie_mes_wide <- dcast(
   serie_mes,
   periodo_dt + total_bocas ~ grupo_tipo,
@@ -194,6 +210,8 @@ print(multi_tipo_bocames[1:100])
 safe_min <- function(x) if (all(is.na(x))) as.IDate(NA) else min(x, na.rm = TRUE)
 safe_max <- function(x) if (all(is.na(x))) as.IDate(NA) else max(x, na.rm = TRUE)
 
+# One row per station: which of the two label families it ever carries, and the
+# span of months it carries each
 switch_estaciones <- dt[
   !is.na(periodo_dt) & !is.na(nro_inscripcion),
   .(
@@ -207,6 +225,9 @@ switch_estaciones <- dt[
   by = nro_inscripcion
 ]
 
+# Stations split three ways: only the generic label, only a detailed one, or
+# both at different times. In the third group the recoded months sit next to
+# months the source already labels in detail.
 res_switch <- switch_estaciones[, .(
   n_total_estaciones = .N,
   n_solo_estacion = sum(has_estacion & !has_boca, na.rm = TRUE),
@@ -275,6 +296,8 @@ flags_prod[, tipo_inferido := fifelse(
   )
 )]
 
+# The inferred type, restricted to the boca-months the source leaves generic,
+# by year and over the whole sample
 est_diag <- dt[
   tipo_negocio_norm == "estacion de servicio"
 ][flags_prod, on = .(nro_inscripcion, periodo_dt)]
@@ -309,6 +332,15 @@ cat("8) tail(est_infer_anio, 20)\n")
 
 # 2. Type inferred month by month ----
 
+# First way of treating time, and the input to the others: each boca-month gets
+# the type implied by the products the outlet reported that month. The type is
+# free to move month to month, so a station that reports no CNG in one month
+# stops being dual for that month and is dual again in the next. Parts 5 and 6
+# answer that in different ways.
+#
+# Only rows carrying "Estación de servicio" are recoded. Rows that already have
+# a detailed "Bocas de expendio" label keep it. The result is tipo_negocio_h.
+
 # Work on a new copy of the panel loaded in part 1
 dt <- copy(eess_all_cleaned5_cut)
 setDT(dt)
@@ -340,7 +372,10 @@ flags_prod <- dt[
   by = .(nro_inscripcion, periodo_dt)
 ]
 
-# PRVE is read from the sales channel, when that column is present
+# PRVE is read from the sales channel, when that column is present. No channel
+# value contains "prve", so the flag stays FALSE and the PRVE branch of the rule
+# below never fires; the outlets the source itself labels "Líquidos + PRVE" keep
+# that label, since only the generic one is recoded.
 flags_prod[, has_prve := FALSE]
 
 if ("canal_norm" %in% names(dt)) {
@@ -355,7 +390,8 @@ if ("canal_norm" %in% names(dt)) {
 # Inferred type by boca-month: liquids + PRVE (no GNC or GLPA), dual liquids +
 # GNC, dual liquids + GLPA, GNC only, GLPA only, liquids only. The labels are
 # spelled exactly as the detailed categories of the source. Boca-months with
-# none of these products stay NA.
+# none of these products stay NA. The first match wins, so a boca-month with
+# liquids, GNC and GLPA is recorded as dual liquids + GNC.
 flags_prod[, tipo_inferido := fifelse(
   has_prve & has_liquid & !has_gnc & !has_glpa,
   "Bocas de expendio (venta por menor) Combustibles Líquidos + PRVE",
@@ -435,6 +471,12 @@ print(serie_h_anio)
 
 # 3. Save cleaned6: panel without the generic label ----
 
+# The monthly version, written to disk as a reference point. The analysis panel
+# is not this file but the one part 7 saves.
+#
+# Input:  dt, from part 2
+# Output: eess_all_cleaned6_cut_nostations.rds
+#
 # dt comes from part 2 and carries tipo_negocio_raw, tipo_negocio_h and the
 # helper columns tipo_negocio_norm, producto_norm, canal_norm and tipo_inferido.
 
@@ -454,6 +496,8 @@ setDT(eess_all_cleaned6_cut_nostations)
 # tipo_negocio_raw
 eess_all_cleaned6_cut_nostations[, tipo_negocio := tipo_negocio_h]
 
+# The normalized helpers go; tipo_negocio_raw and tipo_negocio_h stay, so the
+# recoding can be traced from the saved file
 drop_cols <- intersect(
   c("tipo_negocio_norm", "producto_norm", "canal_norm", "tipo_inferido"),
   names(eess_all_cleaned6_cut_nostations)
@@ -478,6 +522,8 @@ if (all(c("tipo_negocio", "tipo_negocio_raw", "tipo_negocio_h") %in% names(eess_
   setcolorder(eess_all_cleaned6_cut_nostations, new_order)
 }
 
+# The generic label should be gone from tipo_negocio and tipo_negocio_h, and
+# still there in tipo_negocio_raw
 check_cleaned6 <- eess_all_cleaned6_cut_nostations[, .(
   filas = .N,
   columnas = ncol(eess_all_cleaned6_cut_nostations),
@@ -517,7 +563,10 @@ gc()
 # 4. Stability of tipo_negocio_h over time ----
 
 # Uses dt from part 2. Because the type is inferred month by month, it changes
-# whenever the product mix reported by a station does.
+# whenever the product mix reported by a station does. The counts below are
+# taken by operator, by boca and by boca-year; the boca-year one measures how
+# often the type moves inside a single year, which is what the alternatives in
+# parts 5 and 6 set out to remove.
 setDT(dt)
 
 # Distinct types per operator over the sample
@@ -584,6 +633,15 @@ print(ej_cambios)
 
 # 5. Alternative: type fixed per station (mode over time) ----
 
+# Second way of treating time: one type per outlet for the whole sample, the
+# most frequent of its monthly types. The type stops moving altogether, both
+# where a product is simply missing from one month's report and where the outlet
+# really did start selling something new. Part 6 keeps the second kind of move.
+#
+# The version built here is kept in memory for the comparisons at the end of the
+# section and is not saved; it adds tipo_negocio_h_station, modal_share_estacion
+# and the two flags that mark the cases worth a look.
+#
 # Every station originally labeled "Estación de servicio" gets its most
 # frequent monthly type. Start again from the panel on disk; the copies from
 # the previous sections are dropped first (each one is about 1 GB).
@@ -606,6 +664,7 @@ norm_txt <- function(x) {
   x
 }
 
+# The normalized columns are rebuilt here: the panel on disk does not carry them
 dt <- copy(eess_all_cleaned5_cut)
 setDT(dt)
 
@@ -667,6 +726,8 @@ flags_prod[, tipo_inferido_mes := fifelse(
 
 dt[flags_prod, tipo_inferido_mes := i.tipo_inferido_mes, on = .(nro_inscripcion, periodo_dt)]
 
+# tipo_negocio_h_mes is the variable part 2 calls tipo_negocio_h; the mode is
+# taken over it
 dt[, tipo_negocio_h_mes := tipo_negocio_raw]
 dt[
   tipo_negocio_norm == "estacion de servicio" & !is.na(tipo_inferido_mes),
@@ -674,7 +735,8 @@ dt[
 ]
 
 # Second step: modal type per station, computed over the boca-months originally
-# labeled "Estación de servicio"
+# labeled "Estación de servicio". Months the source already labels in detail
+# stay out of the count, so the mode describes the part being filled in.
 est_bocames <- unique(
   dt[tipo_negocio_norm == "estacion de servicio",
      .(nro_inscripcion, periodo_dt, tipo_negocio_h_mes)]
@@ -705,6 +767,8 @@ priority_map <- data.table(
 station_type_counts[priority_map, priority_rank := i.priority_rank, on = "tipo_negocio_h_mes"]
 station_type_counts[is.na(priority_rank), priority_rank := 999L]
 
+# Months each station spends under the generic label, the denominator of the
+# modal share below
 station_totals <- est_bocames[
   , .(total_boca_mes_estacion = .N),
   by = nro_inscripcion
@@ -792,6 +856,8 @@ compare_mes_vs_station <- eess_all_cleaned7_alternative_stationfixed[
 cat("\nMonthly version vs station-fixed version:\n")
 print(compare_mes_vs_station)
 
+# The same comparison as one number: the share of generic-label boca-months the
+# mode reassigns
 impact_summary <- eess_all_cleaned7_alternative_stationfixed[
   tipo_negocio_norm == "estacion de servicio",
   .(
@@ -837,11 +903,21 @@ if (length(drop_cols) > 0) {
 
 # 6. Alternatives: "ever" and "since first appearance" ----
 
+# Third and fourth ways of treating time. Both look at when a product shows up
+# rather than at how many months it is there, which is what separates them from
+# the mode of part 5.
+#
 # "Ever" infers one type per station from every product it sells at some point
-# in the sample. "Since first appearance" switches a feature (GNC, GLPA, PRVE)
+# in the sample, so a station that adds CNG in 2015 is dual from its first month
+# in 2004 as well. "Since first appearance" switches a feature (GNC, GLPA, PRVE)
 # on from the first month the station reports it, so the type does not revert
-# when a product is missing in a later month. Start again from the panel on
-# disk.
+# when a product is missing in a later month: it moves forward, and only when a
+# feature first appears.
+#
+# Both versions are built on the same dt and end up as two columns,
+# tipo_negocio_h_ever and tipo_negocio_h_since, which the checks at the end
+# compare against each other and against the monthly version. Start again from
+# the panel on disk.
 rm(eess_all_cleaned5_cut, dt, eess_all_cleaned7_alternative_stationfixed)
 gc()
 
@@ -944,6 +1020,7 @@ station_ever <- flags_prod[
   by = nro_inscripcion
 ]
 
+# The cascade of part 2, read off the ever_ flags instead of the monthly ones
 station_ever[, tipo_negocio_h_ever_station := fifelse(
   ever_prve & ever_liquid & !ever_gnc & !ever_glpa,
   "Bocas de expendio (venta por menor) Combustibles Líquidos + PRVE",
@@ -972,13 +1049,15 @@ station_ever[, tipo_negocio_h_ever_station := fifelse(
 
 dt[station_ever, tipo_negocio_h_ever_station := i.tipo_negocio_h_ever_station, on = "nro_inscripcion"]
 
+# As in part 2, the inferred type only replaces the generic label
 dt[, tipo_negocio_h_ever := tipo_negocio_raw]
 dt[
   tipo_negocio_norm == "estacion de servicio" & !is.na(tipo_negocio_h_ever_station),
   tipo_negocio_h_ever := tipo_negocio_h_ever_station
 ]
 
-# "Since first appearance": first month in which each feature shows up
+# "Since first appearance": first month in which each feature shows up, over the
+# same set of stations as above
 station_firsts <- flags_prod[
   dt[tipo_negocio_norm == "estacion de servicio", .(nro_inscripcion)] |> unique(),
   on = "nro_inscripcion",
@@ -1012,7 +1091,13 @@ dt[, tipo_negocio_h_since := tipo_negocio_raw]
 #   5. GLPA and never liquids: GLPA only, from the first GLPA month
 #   6. every remaining row of a station that sells liquids at some point:
 #      liquids only
+#
+# Rule 3 never fires: has_prve is FALSE everywhere, so first_prve is NA for
+# every station. Rules 1 and 2 use pmax(), so the type turns dual in the month
+# the second of the two products appears, not in the month of the first.
 
+# Rule 1, the only one that does not test tipo_negocio_h_since: nothing has been
+# set yet
 dt[
   tipo_negocio_norm == "estacion de servicio" &
     !is.na(first_gnc) & !is.na(first_liquid) &
@@ -1020,6 +1105,7 @@ dt[
   tipo_negocio_h_since := "Bocas de expendio (venta por menor) Duales (líquidos + GNC)"
 ]
 
+# Rule 2
 dt[
   tipo_negocio_norm == "estacion de servicio" &
     tipo_negocio_h_since == tipo_negocio_raw &
@@ -1028,6 +1114,7 @@ dt[
   tipo_negocio_h_since := "Bocas de expendio (venta por menor) Duales (líquidos + GLPA)"
 ]
 
+# Rule 3
 dt[
   tipo_negocio_norm == "estacion de servicio" &
     tipo_negocio_h_since == tipo_negocio_raw &
@@ -1038,6 +1125,7 @@ dt[
   tipo_negocio_h_since := "Bocas de expendio (venta por menor) Combustibles Líquidos + PRVE"
 ]
 
+# Rule 4
 dt[
   tipo_negocio_norm == "estacion de servicio" &
     tipo_negocio_h_since == tipo_negocio_raw &
@@ -1046,6 +1134,7 @@ dt[
   tipo_negocio_h_since := "Bocas de expendio (venta por menor) Sólo GNC"
 ]
 
+# Rule 5
 dt[
   tipo_negocio_norm == "estacion de servicio" &
     tipo_negocio_h_since == tipo_negocio_raw &
@@ -1054,6 +1143,8 @@ dt[
   tipo_negocio_h_since := "Boca de expendio de sólo GLPA"
 ]
 
+# Rule 6, with no date condition: it also covers the months before the station
+# first reports liquids
 dt[
   tipo_negocio_norm == "estacion de servicio" &
     tipo_negocio_h_since == tipo_negocio_raw &
@@ -1077,6 +1168,8 @@ cmp_mes_since <- eess_all_cleaned7_alternative_sinceappearance[
 cat("\nMonthly vs since-appearance version:\n")
 print(cmp_mes_since)
 
+# The same as one number: the share of generic-label boca-months whose type the
+# rule moves
 impact_since <- eess_all_cleaned7_alternative_sinceappearance[
   tipo_negocio_norm == "estacion de servicio",
   .(
@@ -1100,6 +1193,9 @@ cmp_since_ever <- eess_all_cleaned7_alternative_sinceappearance[
 cat("\nSince-appearance vs ever version:\n")
 print(cmp_since_ever)
 
+# Where the two disagree it is mostly the months before a product first shows
+# up: "ever" credits the station with it from its first month, while this one
+# does not
 impact_ever <- eess_all_cleaned7_alternative_sinceappearance[
   tipo_negocio_norm == "estacion de servicio",
   .(
@@ -1113,7 +1209,9 @@ impact_ever <- eess_all_cleaned7_alternative_sinceappearance[
 cat("\nImpact of since-appearance vs ever:\n")
 print(impact_ever)
 
-# Number of types per station under the since-appearance rule
+# Number of types per station under the since-appearance rule. More than one is
+# expected here, unlike part 5, since the rule lets the type move forward when a
+# feature first appears.
 station_since_stability <- eess_all_cleaned7_alternative_sinceappearance[
   tipo_negocio_norm == "estacion de servicio",
   .(n_tipos_h_since = uniqueN(tipo_negocio_h_since)),
@@ -1133,6 +1231,8 @@ diff_examples <- eess_all_cleaned7_alternative_sinceappearance[
 cat("\nExamples where since-appearance and ever differ:\n")
 print(diff_examples[1:200])
 
+# Only the normalized helpers go here. The other versions of the type and the
+# first-appearance dates stay on the object and are dropped in part 7
 drop_cols <- intersect(
   c("tipo_negocio_norm", "producto_norm", "canal_norm"),
   names(eess_all_cleaned7_alternative_sinceappearance)
@@ -1144,6 +1244,13 @@ if (length(drop_cols) > 0) {
 
 
 # 7. Save cleaned7: tipo_negocio = since-appearance version ----
+
+# The analysis panel. Of the versions built above, tipo_negocio keeps the one
+# from part 6, "since first appearance": constant within an outlet except when
+# the outlet starts reporting a new product, and never crediting it with a
+# product before that month. The monthly version and "ever" are dropped from the
+# file, so what the rest of the pipeline reads as tipo_negocio is that one; the
+# source label stays in tipo_negocio_raw.
 
 # Uses eess_all_cleaned7_alternative_sinceappearance from part 6
 FILE_OUT <- fs::path(DIR_DATASETS, "eess_all_cleaned7_alternative_sinceappearance.rds")
@@ -1199,6 +1306,9 @@ norm_txt <- function(x) {
   x
 }
 
+# n_estacion_en_since counts the boca-months no rule reaches: a station that
+# never reports liquids keeps the source label in the months before its first
+# GNC or GLPA, and tipo_negocio inherits it
 check_final <- base_out[, .(
   filas = .N,
   columnas = ncol(base_out),

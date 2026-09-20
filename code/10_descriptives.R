@@ -12,6 +12,19 @@
 #
 # Figures are written to a temporary folder first and copied afterwards,
 # because the sync client locks files while a plot is being written.
+#
+# The five sections are independent: each reads the panel it needs and sets up
+# its own brand groups, products and regime breaks, so any one of them can be
+# run on its own.
+#   1. market structure                        tables 1-28, figures g1-g15
+#   2. YPF against the private brands          figR1-figR4
+#   3. volumes, shares and reporting gaps      tables 29-32, figQ1-figQ4
+#   4. station characteristics                 tables 33-34, figC1-figC2
+#   5. pump price against crude and parity     figK1-figK4 and figK1b
+#
+# Titles, axis labels and table captions are in Spanish throughout: the tables
+# and figures go into a thesis written in Spanish and are not retyped. Comments
+# and console messages are in English.
 
 suppressPackageStartupMessages({
   library(data.table)
@@ -38,11 +51,34 @@ DIR_INPUT   <- DIR_INTERIM
 # Input:  eess_all_cleaned7_alternative_sinceappearance.rds
 # Output: 28 LaTeX tables in <DIR_OUTPUT>/Tablas and 15 PNG figures in
 #         <DIR_OUTPUT>/Gráficos
+#
+# The section runs five blocks over one panel held in memory:
+#   tables 1-8, figures 1-3      owners of the outlets and concentration
+#   tables 9-12, figures 4-7     outlets per month and business type
+#   tables 13-16                 missing values, zeros and the volume tails
+#   tables 17-24, figures 8-11   volume and prices by product group
+#   tables 25-28, figures 12-15  brands year by year
+#
+# Each block was written to run on its own, so the option below, the coercion
+# of periodo_dt and the guards that rebuild the parsed columns appear more than
+# once, and every block ends by listing the files it wrote.
+#
+# The panel is not filtered by sales channel here: retail outlets ("Al
+# público") sit alongside wholesalers, distributors and resellers, and the
+# business-type tables below show the mix. Sections 2 to 5 restrict the sample
+# to the retail channel.
+#
+# The numbers used in the comments are the numbers in the file names, which is
+# how the thesis cites them. They match the R object names up to table 17; from
+# tabla_18 on, which is plotted and not exported, the object numbers run one
+# ahead of the file numbers.
 
 options(scipen = 999)
 
 # Paths ----
 
+# Panel written by 05_business_type.R. The two output folders are created here
+# and are written to by sections 3 to 5 as well.
 FILE_BASE <- fs::path(DIR_INPUT, "eess_all_cleaned7_alternative_sinceappearance.rds")
 
 fs::dir_create(DIR_TABLES, recurse = TRUE)
@@ -54,6 +90,8 @@ if (!fs::file_exists(FILE_BASE)) {
 
 # Load panel ----
 
+# One copy of the panel serves the whole section. Columns added by a block stay
+# in it and are visible to the blocks that follow.
 eess <- readRDS(FILE_BASE)
 setDT(eess)
 
@@ -63,6 +101,8 @@ cat("Columns:", ncol(eess), "\n")
 
 # Helpers ----
 
+# Shared by every block of this section: text normalization, cell formats, a
+# LaTeX writer and the size classes used in the concentration tables.
 # Normalize free text (accents, case, punctuation, repeated spaces) so that
 # operator names that differ only in spelling collapse into one
 norm_txt <- function(x) {
@@ -75,6 +115,8 @@ norm_txt <- function(x) {
 }
 
 # Cell formatting for the exported tables; NA becomes an empty cell
+# fmt_n() writes a comma as thousands separator; the fmt_n() that section 3
+# defines for itself writes a period, the Spanish convention.
 fmt_n <- function(x) {
   ifelse(is.na(x), "", format(x, big.mark = ",", scientific = FALSE, trim = TRUE))
 }
@@ -83,6 +125,8 @@ fmt_pct <- function(x, digits = 1) {
   ifelse(is.na(x), "", paste0(formatC(100 * x, format = "f", digits = digits), "%"))
 }
 
+# One booktabs table per file. Captions and column headers are in Spanish and
+# go into the thesis unchanged, so they are not translated here.
 save_tex_table <- function(df, file_path, caption = NULL, label = NULL, align = NULL) {
   tex <- knitr::kable(
     df,
@@ -99,6 +143,9 @@ save_tex_table <- function(df, file_path, caption = NULL, label = NULL, align = 
 }
 
 # Size classes by number of outlets
+# Classes are 1, 2-3, 4-10, 11-50 and 51+, and are applied to CUITs and to
+# normalized operator names alike, so tables 6 and 7 can be read against
+# each other.
 bucket_fun <- function(x) {
   fifelse(
     x == 1, "1",
@@ -117,6 +164,8 @@ bucket_fun <- function(x) {
 
 # Minimal cleaning ----
 
+# Only what the tables need: dates as dates, a year column, trimmed
+# identifiers. No row is dropped here and the original columns are left alone.
 if (!inherits(eess$periodo_dt, c("IDate", "Date"))) {
   eess[, periodo_dt := as.IDate(periodo_dt)]
 }
@@ -144,6 +193,8 @@ eess[provincia_clean %in% c("", "NA", "N/A", "NULL", "N/D", "ND"), provincia_cle
 
 # Auxiliary tables ----
 
+# Built once here rather than inside each block, so the de-duplication is done
+# in one place.
 # Unique combinations used by the tables below. A boca (outlet) is identified by
 # nro_inscripcion; bandera is the brand.
 
@@ -186,7 +237,17 @@ cuit_boca_bandera <- unique(
 
 # Outlets, operators and concentration (tables 1-8, figures 1-3) ----
 
+# Who owns the outlets, and how concentrated that ownership is. Every count is
+# done three ways, on the raw operator name, on the normalized name and on the
+# CUIT (tax id of the firm), because the source spells the same firm in many
+# ways and the CUIT is the only identifier stable across years. Comparing the
+# three counts is the point of the block.
+#
+# Counts of outlets are counts of distinct nro_inscripcion, never of rows: the
+# panel has one row per outlet, product, channel and month.
 # Table 1: overall snapshot of the panel
+# Read it next to tables 3 to 5: the number of operators depends on which
+# identifier is used, and these rows show by how much.
 tabla_01 <- data.table(
   Estadistica = c(
     "Cantidad de filas",
@@ -222,6 +283,8 @@ save_tex_table(
 )
 
 # Table 2: outlets and other basic units per year
+# Every column is a count of distinct units observed in the year, so a year in
+# which the source reports thinly shows up as a drop in all of them at once.
 tabla_02 <- boca_anio[
   , .(
     n_bocas = uniqueN(nro_inscripcion),
@@ -235,6 +298,9 @@ tabla_02 <- boca_anio[
   by = anio
 ][order(anio)]
 
+# Every table is exported through a formatted copy. fmt_n() and fmt_pct()
+# return character, so the numeric object stays intact for the figures that
+# reuse it; the same copy-and-format step repeats for each table below.
 tabla_02_out <- copy(tabla_02)
 num_cols_02 <- setdiff(names(tabla_02_out), "anio")
 for (v in num_cols_02) tabla_02_out[, (v) := fmt_n(get(v))]
@@ -247,6 +313,8 @@ save_tex_table(
 )
 
 # Table 3: top 20 CUITs by number of outlets
+# cuit_counts is the ranking of every CUIT. It is built once here and reused by
+# tables 6 and 8 and by figure 2.
 cuit_counts <- cuit_boca[
   , .(n_bocas = uniqueN(nro_inscripcion)),
   by = cuit_clean
@@ -291,6 +359,8 @@ save_tex_table(
 )
 
 # Table 4: top 20 operators by number of outlets, raw name
+# Ranked on the raw string, so a firm whose name is spelled several ways is
+# split across rows. Table 5 repeats the ranking on the normalized name.
 tabla_04 <- operador_boca_raw[
   , .(n_bocas = uniqueN(nro_inscripcion)),
   by = operador_raw
@@ -313,6 +383,8 @@ save_tex_table(
 # Table 5: top 20 operators by number of outlets, normalized name
 
 # Number of distinct raw spellings behind each normalized name
+# n_nombres_raw travels into table 5: a large value marks a firm that table 4
+# broke into several rows.
 nombres_raw_por_norm <- unique(
   eess[!is.na(operador_raw) & !is.na(operador_norm),
        .(operador_norm, operador_raw)]
@@ -346,6 +418,9 @@ save_tex_table(
 
 # Table 6: concentration of outlets by CUIT size class.
 # The bucket column is added to cuit_counts by reference and stays there.
+# Read the two share columns together: what fraction of CUITs falls in each
+# size class, and what fraction of the outlets those CUITs hold. The match() at
+# the end puts the classes back in ascending order after the group-by.
 tabla_06 <- cuit_counts[
   , bucket := bucket_fun(n_bocas)
 ][
@@ -379,6 +454,9 @@ save_tex_table(
 )
 
 # Table 7: concentration of outlets by size class of the normalized operator
+# The same classes on the normalized operator name. It parts company with
+# table 6 wherever one firm files under several CUITs, or one CUIT trades under
+# several names.
 operador_norm_counts <- operador_boca_norm[
   , .(n_bocas = uniqueN(nro_inscripcion)),
   by = operador_norm
@@ -417,6 +495,8 @@ save_tex_table(
 )
 
 # Table 8: three main brands within each of the 10 largest CUITs
+# Separates the large owners that run a single chain from those holding outlets
+# under several banderas at once. Shares are within the CUIT, not of the market.
 top10_cuit <- cuit_counts[1:min(10, .N)]
 top10_cuit[, rank_cuit := .I]
 
@@ -455,6 +535,8 @@ save_tex_table(
 )
 
 # Figure 1: outlets per year
+# Built from tabla_02, so the line is the number of outlets that reported in
+# the year, not the number in operation.
 g1_data <- copy(tabla_02)
 
 g1 <- ggplot(g1_data, aes(x = anio, y = n_bocas)) +
@@ -476,6 +558,9 @@ ggsave(
 )
 
 # Figure 2: top 20 CUITs by number of outlets
+# Figures 2 and 3 are the same ranking under the two firm definitions, by CUIT
+# and by normalized operator name. Levels are reversed so that coord_flip()
+# leaves the largest bar at the top.
 g2_data <- copy(cuit_counts[1:min(20, .N)])
 g2_data[, cuit_clean := factor(cuit_clean, levels = rev(cuit_clean))]
 
@@ -534,6 +619,11 @@ cat("- g3_top20_operador_norm_por_bocas.png\n")
 
 # Outlets over time and business type (tables 9-12, figures 4-7) ----
 
+# How many outlets report each month, and what kind of business they run. The
+# composition is built twice, once with the harmonized business type and once
+# with the type exactly as the source filed it, so that what the harmonization
+# does is visible rather than assumed. The stopifnot() below is here because
+# the block reads columns the earlier blocks do not touch.
 req_vars_time <- c("nro_inscripcion", "periodo_dt", "anio", "tipo_negocio", "tipo_negocio_raw")
 stopifnot(all(req_vars_time %in% names(eess)))
 
@@ -588,6 +678,8 @@ boca_mes_tipo_raw <- unique(
 )
 
 # An outlet-month should carry a single business type, harmonized or raw
+# A count above zero would mean the composition tables double-count that
+# outlet-month, so both checks are printed before the tables are built.
 check_h <- boca_mes_tipo_h[
   , .(n_tipos = uniqueN(tipo_negocio_clean)),
   by = .(nro_inscripcion, periodo_dt)
@@ -603,6 +695,8 @@ check_raw <- boca_mes_tipo_raw[
 cat("Raw type, outlet-months with more than one type:", nrow(check_raw), "\n")
 
 # Table 9: outlets observed per month
+# Counted over outlet-months that carry a business type, so it sits slightly
+# below the number of outlets that reported anything in the month.
 tabla_09 <- boca_mes_tipo_h[
   , .(bocas_mes = uniqueN(nro_inscripcion)),
   by = .(periodo_dt, anio)
@@ -621,6 +715,8 @@ save_tex_table(
 )
 
 # Figure 4: monthly series of observed outlets
+# The series counts outlets that reported, not outlets in operation. Section 3
+# measures how far apart the two are.
 g4 <- ggplot(tabla_09, aes(x = as.Date(periodo_dt), y = bocas_mes)) +
   geom_line(linewidth = 0.9) +
   labs(
@@ -684,6 +780,8 @@ order_raw <- comp_raw[
 comp_raw[, tipo_negocio_raw_clean := factor(tipo_negocio_raw_clean, levels = order_raw$tipo_negocio_raw_clean)]
 
 # Short legend labels for the long category names, harmonized type
+# The official category names are long. They are shortened only for the
+# legends; tables 10 and 11 keep the full names as column headers.
 comp_h[, tipo_plot := as.character(tipo_negocio_clean)]
 
 comp_h[tipo_plot == "Bocas de expendio (venta por menor) Combustibles líquidos únicamente",
@@ -744,6 +842,8 @@ comp_raw[tipo_plot_raw == "Comercializador (venta a granel mayorista)",
          tipo_plot_raw := "Comercializador"]
 
 # Legend order by average share
+# Computed a second time because the short labels are a different variable from
+# the full category names ordered above.
 order_h_plot <- comp_h[
   , .(share_promedio = mean(share, na.rm = TRUE)),
   by = tipo_plot
@@ -760,6 +860,8 @@ comp_raw[, tipo_plot_raw := factor(tipo_plot_raw, levels = order_raw_plot$tipo_p
 
 # Table 10: composition by harmonized type in the last 12 months of the panel.
 # Each cell shows the number of outlets and the monthly share.
+# Only the last twelve months are tabulated; figures 5 to 7 carry the whole
+# period.
 ultimos_12 <- sort(unique(comp_h$periodo_dt), decreasing = TRUE)[1:12]
 ultimos_12 <- sort(ultimos_12)
 
@@ -767,6 +869,8 @@ comp_h_12 <- comp_h[periodo_dt %in% ultimos_12]
 
 tipos_h <- levels(comp_h$tipo_negocio_clean)
 
+# Counts and shares are cast separately and then pasted into a single cell per
+# type.
 tabla_10_counts <- dcast(
   comp_h_12,
   periodo_dt + total_bocas ~ tipo_negocio_clean,
@@ -804,6 +908,8 @@ save_tex_table(
 )
 
 # Table 11: same table with the raw type
+# Built for the same twelve months as table 10, so the two can be read row by
+# row.
 comp_raw_12 <- comp_raw[periodo_dt %in% ultimos_12]
 
 tipos_raw <- levels(comp_raw$tipo_negocio_raw_clean)
@@ -845,6 +951,8 @@ save_tex_table(
 )
 
 # Figure 5: stacked area of monthly shares, harmonized type
+# Shares add to one within each month, so the bands show composition and say
+# nothing about the size of the panel.
 g5 <- ggplot(comp_h, aes(x = as.Date(periodo_dt), y = share, fill = tipo_plot)) +
   geom_area(color = "white", linewidth = 0.15, alpha = 0.95) +
   labs(
@@ -868,6 +976,8 @@ ggsave(
 )
 
 # Figure 6: stacked area of outlet counts, harmonized type
+# The same bands without normalizing, so the height of the stack is the number
+# of outlets reporting that month.
 g6 <- ggplot(comp_h, aes(x = as.Date(periodo_dt), y = n_bocas, fill = tipo_plot)) +
   geom_area(color = "white", linewidth = 0.15, alpha = 0.95) +
   labs(
@@ -890,6 +1000,8 @@ ggsave(
 )
 
 # Figure 7: stacked area of monthly shares, raw type
+# Against figure 5 the difference is the harmonization: categories that exist
+# only in the raw variable show up here.
 g7 <- ggplot(comp_raw, aes(x = as.Date(periodo_dt), y = share, fill = tipo_plot_raw)) +
   geom_area(color = "white", linewidth = 0.15, alpha = 0.95) +
   labs(
@@ -913,6 +1025,8 @@ ggsave(
 )
 
 # Table 12: average, minimum and maximum monthly share by harmonized type
+# Averaged over every month of the panel. A category whose minimum and maximum
+# lie far apart is one whose weight moved over the period.
 tabla_12 <- comp_h[
   , .(
     share_promedio = mean(share, na.rm = TRUE),
@@ -952,6 +1066,13 @@ cat("- g7_area_share_tipo_negocio_raw.png\n")
 
 # Missing values, zeros and volume (tables 13-16) ----
 
+# Quality of the two variables the rest of the thesis leans on. How much of the
+# price and volume data is missing, how much is zero, and what sits in the two
+# tails of the volume distribution. Nothing is corrected here; the cleaning is
+# in 02_clean_volume.R and 03_clean_prices.R.
+#
+# Shares are taken over rows of the panel, so a product reported in many months
+# weighs more than one reported in few.
 # Prices and volume may come as character; anything that does not parse is NA
 parse_num_safe <- function(x) {
   x <- trimws(as.character(x))
@@ -963,6 +1084,8 @@ fmt_num <- function(x, digits = 3) {
   ifelse(is.na(x), "", formatC(x, format = "f", digits = digits, big.mark = ","))
 }
 
+# The parsed columns are added to the panel and are reused by the two blocks
+# that follow.
 eess[, precio_surtidor_num := parse_num_safe(precio_surtidor)]
 eess[, precio_con_impuestos_num := parse_num_safe(precio_con_impuestos)]
 eess[, precio_sin_impuestos_num := parse_num_safe(precio_sin_impuestos)]
@@ -971,6 +1094,8 @@ eess[, volumen_num := parse_num_safe(volumen)]
 
 # Table 13: share of missing values and zeros in prices and volume.
 # Shares of zeros are taken over non-missing observations.
+# precio_surtidor is the posted pump price; the other two are the same price
+# with and without taxes.
 n_total_obs <- nrow(eess)
 
 tabla_13 <- data.table(
@@ -1003,6 +1128,9 @@ save_tex_table(
 )
 
 # Table 14: summary statistics of volume
+# Percentiles of volume as filed, over every product and channel and before any
+# cap. The distance between p99 and the maximum is the tail that tables 15 and
+# 16 inspect record by record.
 vol_ok <- eess[!is.na(volumen_num), volumen_num]
 
 tabla_14 <- data.table(
@@ -1069,6 +1197,8 @@ save_tex_table(
 )
 
 # Table 15: the 25 records with the largest volume
+# volumen_original is kept beside the parsed value so a suspect record can be
+# checked against the string the outlet actually filed.
 tabla_15 <- eess[
   !is.na(volumen_num),
   .(
@@ -1097,6 +1227,8 @@ save_tex_table(
 )
 
 # Table 16: the 25 records with the smallest volume
+# Printed at six decimals: the bottom of the distribution sits at the 1e-3
+# floor that 02_clean_volume.R imposes on volume.
 tabla_16 <- eess[
   !is.na(volumen_num),
   .(
@@ -1132,6 +1264,11 @@ cat("- 16_bottom25_volumen.tex\n")
 
 # Volume and prices by group (tables 17-24, figures 8-11) ----
 
+# Volume and prices once products are collapsed into three families, and the
+# same statistics by product, province, brand and operator. Volumes are cubic
+# metres and prices nominal pesos per litre, both as filed, so levels are not
+# comparable across years and the tables are read within a row rather than down
+# a column.
 # Rebuild the numeric and cleaned columns if the blocks above were skipped
 if (!"volumen_num" %in% names(eess)) {
   eess[, volumen_num := parse_num_safe(volumen)]
@@ -1163,11 +1300,15 @@ eess[, grupo_producto := fifelse(
   )
 )]
 
+# eess_gp drops every row whose product falls outside the three groups. The
+# tables after figure 11 go back to the full panel.
 eess_gp <- eess[!is.na(grupo_producto)]
 
 eess_gp[, grupo_producto := factor(grupo_producto, levels = c("Naftas", "GNC", "Gasoil"))]
 
 # Table 17: volume by broad product group
+# The share of zeros and the distance between p50 and the maximum are the two
+# things the histograms below draw.
 tabla_17 <- eess_gp[
   !is.na(volumen_num),
   .(
@@ -1209,6 +1350,8 @@ save_tex_table(
 )
 
 # Figure 8: histogram of volume in levels, by product group
+# Levels, with a free y axis per panel. Figures 9 and 10 redraw the same data
+# in logs, where the mass of the distribution is visible.
 g8 <- ggplot(
   eess_gp[!is.na(volumen_num)],
   aes(x = volumen_num)
@@ -1233,6 +1376,8 @@ ggsave(
 )
 
 # Figure 9: histogram of log10(volume), positive volumes only
+# Zeros drop out of the log, so this histogram holds fewer observations than
+# figure 8; figure 10 keeps them by using log(1 + volume).
 g9 <- ggplot(
   eess_gp[!is.na(volumen_num) & volumen_num > 0],
   aes(x = log10(volumen_num))
@@ -1282,6 +1427,8 @@ ggsave(
 
 # Figure 11: total monthly volume by product group. tabla_18 is only plotted, so
 # from here on object numbers run one ahead of the exported file numbers.
+# Monthly totals, so the series carries seasonality and the reporting gaps that
+# section 3 measures on top of any real movement in sales.
 tabla_18 <- eess_gp[
   !is.na(periodo_dt) & !is.na(volumen_num),
   .(volumen_total = sum(volumen_num, na.rm = TRUE)),
@@ -1311,6 +1458,8 @@ ggsave(
 
 # Table 18: overall price and volume statistics. The volume-weighted price uses
 # only rows where both the pump price and the volume are observed.
+# Pools every product, channel and year, so it is a size statement about the
+# panel rather than a price statistic.
 tabla_19 <- data.table(
   Estadistica = c(
     "Observaciones",
@@ -1354,6 +1503,8 @@ save_tex_table(
 )
 
 # Table 19: price and volume statistics by product
+# By the product as the source names it, not by the three broad groups, so each
+# fuel grade is its own row.
 tabla_20 <- eess[
   !is.na(producto_clean),
   .(
@@ -1394,6 +1545,8 @@ save_tex_table(
 )
 
 # Table 20: price and volume statistics by province
+# precio_ponderado mixes products, channels and twenty years of nominal prices.
+# It describes the data; it is not a price index and should not be read as one.
 tabla_21 <- eess[
   !is.na(provincia_clean),
   .(
@@ -1426,6 +1579,8 @@ save_tex_table(
 )
 
 # Table 21: top 20 brands by number of stations
+# Ranked by stations. The volume column beside it is what says which brands
+# sell most per station.
 tabla_22 <- eess[
   !is.na(bandera_clean),
   .(
@@ -1465,6 +1620,8 @@ if (!"operador_norm" %in% names(eess)) {
   eess[operador_norm %in% c("", "na", "n a", "null", "n d", "nd"), operador_norm := NA_character_]
 }
 
+# Operators are not brands: one operator can run outlets of several banderas,
+# as table 8 shows for the largest CUITs.
 tabla_23 <- eess[
   !is.na(operador_norm),
   .(
@@ -1497,6 +1654,8 @@ save_tex_table(
 )
 
 # Table 23: top 20 normalized operators by total volume
+# The same statistics ordered by volume instead of stations, which brings up
+# the operators with few but large outlets.
 tabla_24 <- eess[
   !is.na(operador_norm),
   .(
@@ -1577,6 +1736,10 @@ cat("- 24_top20_operadores_por_precio_ponderado.tex\n")
 
 # Brands by year (tables 25-28, figures 12-15) ----
 
+# Brands year by year: how many stations each one holds, how much it sells, at
+# what volume-weighted price, and which brand leads each year under the two
+# criteria. The rankings cover every year of the panel, so the two long ones
+# are written as longtables.
 # Same as save_tex_table but with longtable, for tables that span several pages
 save_tex_longtable <- function(df, file_path, caption = NULL, label = NULL, align = NULL) {
   tex <- knitr::kable(
@@ -1618,6 +1781,8 @@ tot_bocas_anio <- boca_anio_bandera[
 ]
 
 # Statistics by brand and year
+# Counted over the full panel, so observaciones is outlet x product x month
+# rows while estaciones is distinct outlets.
 bandera_anio_stats <- eess[
   !is.na(bandera_clean) & !is.na(anio),
   .(
@@ -1633,6 +1798,8 @@ bandera_anio_stats[tot_bocas_anio, total_estaciones_anio := i.total_estaciones_a
 bandera_anio_stats[, share_estaciones := estaciones / total_estaciones_anio]
 
 # Table 25: top 10 brands per year by number of stations
+# Ten rows per year over every year of the panel. Shares use the year's total
+# outlets as denominator and do not add to one.
 tabla_26 <- copy(bandera_anio_stats)[
   order(anio, -estaciones, bandera_clean)
 ][
@@ -1667,6 +1834,9 @@ save_tex_longtable(
 )
 
 # Table 26: top 10 brands per year by total volume
+# The same years ranked by volume. Where the two rankings disagree are the
+# brands whose share of sales exceeds their share of outlets, which section 3
+# measures directly.
 tabla_27 <- copy(bandera_anio_stats)[
   order(anio, -volumen_total, bandera_clean)
 ][
@@ -1701,6 +1871,7 @@ save_tex_longtable(
 )
 
 # Table 27: leading brand of each year by number of stations
+# One row per year, the top row of each year's block in table 25.
 tabla_28 <- copy(bandera_anio_stats)[
   order(anio, -estaciones, bandera_clean)
 ][
@@ -1733,6 +1904,8 @@ save_tex_table(
 )
 
 # Table 28: leading brand of each year by total volume
+# The same on volume. Read against table 27 it answers whether the brand with
+# the most outlets is also the one that sells the most.
 tabla_29 <- copy(bandera_anio_stats)[
   order(anio, -volumen_total, bandera_clean)
 ][
@@ -1766,11 +1939,15 @@ save_tex_table(
 
 # Brands shown in the figures: the 10 with the most stations on average across
 # years; the rest are pooled as "Otras"
+# The average runs over the years in which a brand appears, so one that left
+# the market partway through can still make the ten.
 top_banderas_global <- bandera_anio_stats[
   , .(estaciones_promedio = mean(estaciones, na.rm = TRUE)),
   by = bandera_clean
 ][order(-estaciones_promedio, bandera_clean)][1:min(10, .N), bandera_clean]
 
+# The pooling into "Otras" happens after the statistics are computed, so the
+# pooled row is the sum over the brands it absorbs.
 bandera_plot_data <- copy(bandera_anio_stats)
 bandera_plot_data[, bandera_plot := fifelse(
   bandera_clean %in% top_banderas_global,
@@ -1798,6 +1975,7 @@ order_band <- bandera_plot_data[
 bandera_plot_data[, bandera_plot := factor(bandera_plot, levels = order_band$bandera_plot)]
 
 # Figure 12: stations per year for the main brands
+# Counts, with "Otras" dropped. Figure 13 keeps it and shows shares instead.
 g12 <- ggplot(
   bandera_plot_data[bandera_plot != "Otras"],
   aes(x = anio, y = estaciones, color = bandera_plot)
@@ -1847,6 +2025,8 @@ ggsave(
 )
 
 # Figure 14: top 10 brands by stations in the last year of the panel
+# Figures 14 and 15 are the last year of the panel alone, ranked by stations
+# and by volume. The year is read from the data rather than hard-coded.
 ultimo_anio <- max(bandera_anio_stats$anio, na.rm = TRUE)
 
 g14_data <- copy(bandera_anio_stats[anio == ultimo_anio][order(-estaciones, bandera_clean)][1:min(10, .N)])
@@ -1913,6 +2093,16 @@ cat("- g15_top10_banderas_ultimo_anio_volumen.png\n")
 #         (boca (outlet) x product x channel x month)
 # Output: figR1_benchmark_shell.png, figR2_ladder_blancas.png,
 #         figR3_gap_condicional_IC.png, figR4_distribucion_gap.png (Gráficos/)
+#
+# The gap is measured inside a locality x product x month cell, so the stations
+# compared face the same local demand in the same month, and the cells are then
+# summarized by the median across localities. Prices are pre-tax pesos per
+# litre as filed, and the gap is a ratio of two contemporaneous prices, so the
+# currency and the inflation of the period cancel out.
+#
+# Each figure asks one question about the gap: is it an artifact of the
+# benchmark (R1), is YPF cheaper than the independents too (R2), does it
+# survive within a locality (R3), and is it general across the country (R4).
 
 BASE   <- file.path(DIR_INTERIM, "eess_all_cleaned7_alternative_sinceappearance.rds")
 # Figures are written to a local scratch folder and then copied to the synced
@@ -1924,14 +2114,18 @@ DROP   <- file.path(DIR_OUTPUT, "Gráficos")
 # Brand groups and regimes ----
 # PRIV are the large private brands; BLANCA are the blancas (unbranded,
 # independent stations). Focal products: regular gasoline and grade 2 diesel.
+# Sections 3 and 4 set these up again for themselves, so a change here has to
+# be made there too.
 PRIV   <- c("SHELL C.A.P.S.A.","ESSO PETROLERA ARGENTINA S.R.L","AXION","PETROBRAS","Pampa Energia","PUMA","OIL COMBUSTIBLES S.A.")
 BLANCA <- c("BLANCA","SIN EMPRESA BANDERA")
 PRODS  <- c("Nafta (súper) entre 92 y 95 Ron","Gas Oil Grado 2")
-# Regime breaks: YPF nationalized (May 2012), price deregulation (November 2017),
+# Regime breaks: YPF nationalized (May 2012), price deregulation (October 2017),
 # price freeze (August 2019).
 REGS   <- data.frame(x=as.Date(c("2012-05-01","2017-10-01","2019-08-01")),
                      lab=c("2012 · YPF estatal","2017 · desregulación","2019 · congelamiento"))
 
+# The four regimes are the intervals between those breaks. Their labels are
+# what appears on the figures, so they stay in Spanish.
 regime_of <- function(d) factor(
   fifelse(d <  as.Date("2012-05-01"), "YPF privada",
    fifelse(d <  as.Date("2017-10-01"), "Estatal·regulado",
@@ -1940,6 +2134,8 @@ regime_of <- function(d) factor(
 
 # Sample ----
 # Retail channel, focal products, positive pre-tax price.
+# precio_sin_impuestos is used throughout: the price net of taxes, the one
+# comparable with costs, as in section 5.
 b <- readRDS(BASE); setDT(b)
 b <- b[canal_de_comercializacion=="Al público"]
 b[, precio := suppressWarnings(as.numeric(as.character(precio_sin_impuestos)))]
@@ -1950,6 +2146,8 @@ b[, grupo := fifelse(bandera=="YPF","YPF",
                fifelse(bandera %in% BLANCA,"Blanca","Otras")))]
 
 # Mean price of each group by cell (locality x month x product)
+# A cell with no station of a group gives NaN for that group's mean, so the
+# gap comes out missing and the cell drops out of the medians below.
 cm <- b[, .(
   p_ypf   = mean(precio[grupo=="YPF"]),
   p_priv  = mean(precio[grupo=="Priv"]),
@@ -1963,9 +2161,16 @@ cm[, regime := regime_of(periodo_dt)]
 cm[, g_priv  := p_ypf/p_priv  - 1]
 cm[, g_shell := p_ypf/p_shell - 1]
 cm[, g_blan  := p_blan/p_priv - 1]
+# The rule is applied to the three gap columns alike, and only to the gaps: the
+# cell means they are built from are left as they are.
 for (v in c("g_priv","g_shell","g_blan")) cm[abs(get(v))>0.4, (v):=NA_real_]
 
 # R1. Constant benchmark: Shell alone instead of the large private brands ----
+# The same gap against two benchmarks. The set of large private brands changes
+# over the period as chains are rebranded, while Shell keeps its name from end
+# to end; if the two lines move together, the gap is not an artifact of who is
+# in the benchmark. Their correlation is printed at the end of the section.
+# R1 and R2 share a y range, so the two can be read against each other.
 r1 <- rbind(
   cm[!is.na(g_priv),  .(gap=median(g_priv)),  by=.(producto,periodo_dt)][, bench:="vs Privadas grandes"],
   cm[!is.na(g_shell), .(gap=median(g_shell)), by=.(producto,periodo_dt)][, bench:="vs Shell (constante)"])
@@ -1982,6 +2187,9 @@ gR1 <- ggplot(r1, aes(periodo_dt, gap, color=bench)) +
   theme_minimal(base_size=11) + theme(legend.position="bottom", plot.title=element_text(face="bold"))
 
 # R2. Price ladder: YPF and blancas against the large private brands ----
+# The price ladder. YPF and the blancas are measured against the same
+# benchmark, the large private brands, which separates "YPF is cheap" from
+# "YPF is cheaper than anyone else".
 r2 <- rbind(
   cm[!is.na(g_priv), .(gap=median(g_priv)), by=.(producto,periodo_dt)][, grp:="YPF"],
   cm[!is.na(g_blan), .(gap=median(g_blan)), by=.(producto,periodo_dt)][, grp:="Blancas (independientes)"])
@@ -2000,10 +2208,14 @@ gR2 <- ggplot(r2, aes(periodo_dt, gap, color=grp)) +
 # R3. Gap within locality, by regime, with 95% CI clustered by locality ----
 # The gap is first averaged within locality, so the standard error of the mean
 # across localities treats each locality as one cluster.
+# One estimate per regime instead of a monthly line, so the question becomes
+# whether the gap moved when the policy did.
 r3build <- function(col, lab){
   loc <- cm[!is.na(get(col)), .(g=mean(get(col))), by=.(producto,regime,localidad)]
   loc[, .(est=mean(g), se=sd(g)/sqrt(.N), nloc=.N), by=.(producto,regime)][, grp:=lab]
 }
+# Two comparisons in the same figure, YPF and the blancas, each against the
+# large private brands.
 r3 <- rbind(r3build("g_priv","YPF vs Privadas"), r3build("g_blan","Blancas vs Privadas"))
 r3[, `:=`(lo=est-1.96*se, hi=est+1.96*se)]
 gR3 <- ggplot(r3, aes(regime, est, color=grp)) +
@@ -2019,6 +2231,10 @@ gR3 <- ggplot(r3, aes(regime, est, color=grp)) +
                                        axis.text.x=element_text(angle=20, hjust=1))
 
 # R4. Distribution of the gap across localities (p25, median, p75) ----
+# Whether the gap is general or the work of a few places. The band is the
+# interquartile range of the gap across localities and the line its median; a
+# band lying wholly below zero means the gap holds in most localities and not
+# only on average.
 r4 <- cm[!is.na(g_priv), .(p25=quantile(g_priv,.25), p50=median(g_priv), p75=quantile(g_priv,.75)),
          by=.(producto,periodo_dt)]
 gR4 <- ggplot(r4, aes(periodo_dt)) +
@@ -2035,6 +2251,9 @@ gR4 <- ggplot(r4, aes(periodo_dt)) +
   theme_minimal(base_size=11) + theme(plot.title=element_text(face="bold"))
 
 # Save figures ----
+# Written as figR1 to figR4 in the order of the list. Titles and subtitles are
+# in Spanish and carry the reading of each figure, because the plots go into
+# the thesis as they are.
 figs <- list(R1_benchmark_shell=gR1, R2_ladder_blancas=gR2, R3_gap_condicional_IC=gR3, R4_distribucion_gap=gR4)
 dims <- list(c(9.5,6), c(9.5,6), c(9,6.2), c(9.5,6))
 for (i in seq_along(figs)) {
@@ -2045,6 +2264,9 @@ for (i in seq_along(figs)) {
 }
 
 # Console diagnostics ----
+# The numbers quoted in the text: how closely the two benchmarks agree, the
+# mean gap by regime with its interval, and the share of locality-months in
+# which YPF is the cheaper of the two.
 cat("\nR1: correlation between the gap vs. large private brands and the gap vs. Shell, by product\n")
 r1w <- dcast(r1, producto+periodo_dt~bench, value.var="gap")
 print(r1w[, .(cor=round(cor(`vs Privadas grandes`,`vs Shell (constante)`, use="complete.obs"),3)), by=producto])
@@ -2061,6 +2283,14 @@ cat("\nFigures R1-R4 done.\n")
 #
 # Input:  eess_all_cleaned7_alternative_sinceappearance_con_crosswalk.rds
 # Output: tables 29-32 (Tablas/) and figQ1-figQ4 (Gráficos/)
+#
+# This section works on quantities, and it needs the version of the panel that
+# carries the department column, because a market here is a province x
+# department cell. Volumes are cubic metres per outlet-month, summed over the
+# taxed and the exempt rows of the same cell.
+#
+# Q1 works on the uncapped table and asks whether a row exists at all; Q2 to Q4
+# work on the capped one and ask how large the quantities are.
 
 # Paths ----
 FILE_BASE   <- fs::path(DIR_INPUT, "eess_all_cleaned7_alternative_sinceappearance_con_crosswalk.rds")
@@ -2118,6 +2348,8 @@ f[, nucleo := fifelse(provincia %in% NUCLEO, "Núcleo pampeano", "Periferia")]
 pm <- f[, .(vol = sum(vol), n_filas = .N),
         by = .(nro_inscripcion, producto, periodo_dt, provincia, departamento,
                localidad, bandera, grupo, nucleo, cuit)]
+# tt numbers the months from January 2004, so consecutive reports differ by
+# one and any larger step is a month with no row.
 pm[, tt := (year(periodo_dt) - 2004L) * 12L + month(periodo_dt)]
 pm[, regime := regime_of(periodo_dt)]
 # Market id: province x department, with departments taken from the crosswalk
@@ -2125,6 +2357,8 @@ pm[, regime := regime_of(periodo_dt)]
 # repeat across provinces, so counting `departamento` alone undercounts markets.
 pm[, mercado := paste0(provincia, "||", departamento)]
 
+# The console block says how many rows collapsed into outlet-product-months
+# and how many markets and months the sample covers.
 cat("Sample\n")
 cat("focal rows:", fmt_n(nrow(f)), "| outlet x product x month:", fmt_n(nrow(pm)),
     "(collapsed", nrow(f) - nrow(pm), "taxed/exempt rows)\n")
@@ -2137,6 +2371,9 @@ cat("outlets:", uniqueN(pm$nro_inscripcion), "| markets (province x department):
 # to last appearance) with no row. The data hold no zeros, because cleaned3_cut
 # (02_clean_volume.R) keeps volume >= 1e-3, so "did not report"
 # and "sold nothing" cannot be told apart.
+# sp is one row per series (boca x producto) with its active span and the
+# number of months actually reported; gg holds the interruptions, the runs of
+# missing months between two consecutive reports.
 sp <- pm[, .(tt0 = min(tt), tt1 = max(tt), nobs = .N), by = .(nro_inscripcion, producto)]
 sp[, nmeses := tt1 - tt0 + 1L][, huecos := nmeses - nobs][, pct_hueco := huecos / nmeses]
 
@@ -2144,6 +2381,8 @@ setorder(pm, nro_inscripcion, producto, tt)
 pm[, gap := tt - shift(tt) - 1L, by = .(nro_inscripcion, producto)]
 gg <- pm[!is.na(gap) & gap > 0]
 
+# .n_flick counts the series that go dark for six months or more and then come
+# back, which is what the table calls flickering.
 .pct_falt  <- 100 * sum(sp$huecos) / sum(sp$nmeses)
 .n_flick   <- uniqueN(gg[gap >= 6, .(nro_inscripcion, producto)])
 tab29 <- data.table(
@@ -2179,6 +2418,9 @@ save_tex_table(tab29, fs::path(DIR_TABLES, "29_huecos_reporte_panel.tex"),
   label = "huecos_panel")
 
 # Figure Q1: outlets observed vs. active (inside their span), by month
+# act expands each series to every month of its span, so the "activas" line
+# counts the outlets that should have reported. The distance between the two
+# lines is the missing outlet-months of table 29, drawn month by month.
 act   <- sp[, .(tt = seq.int(tt0, tt1)), by = .(nro_inscripcion, producto)]
 q1    <- merge(act[, .(activas = uniqueN(nro_inscripcion)), by = tt],
                pm[, .(observadas = uniqueN(nro_inscripcion)), by = tt], by = "tt", all.x = TRUE)
@@ -2214,6 +2456,7 @@ ggsave(fs::path(DIR_TMP, "figQ1_huecos_panel.png"), gQ1, width = 9, height = 4.6
 #
 # The cap is not applied to `pm`: Q1 measures reporting (whether the row exists),
 # not magnitudes, and dropping outlet-months by volume would inflate the gaps.
+# pmv, the capped table, is what Q2 to Q4 use; pm, uncapped, stays for Q1.
 VOL_CAP <- 3000
 pmv <- pm[vol <= VOL_CAP]
 cat(sprintf("\nVolume cap (Q2-Q4)\ndropped %s of %s outlet-months (%.2f%%) | total volume from %s to %s thousand m3\n",
@@ -2222,6 +2465,10 @@ cat(sprintf("\nVolume cap (Q2-Q4)\ndropped %s of %s outlet-months (%.2f%%) | tot
             fmt_n(round(sum(pm$vol) / 1e3)), fmt_n(round(sum(pmv$vol) / 1e3))))
 
 # Q2. Market shares: volume vs. number of outlets (table 30, figQ2) ----
+# The same market share measured two ways: the share of outlets a group holds
+# and the share of volume it sells. Their ratio in table 30 is the size of the
+# group's average outlet against the market average, and figQ2 follows YPF's
+# two shares over time.
 nat_vol <- pmv[, .(vol = sum(vol)), by = .(periodo_dt, producto, grupo)]
 nat_vol[, share := vol / sum(vol), by = .(periodo_dt, producto)]
 nat_boc <- pmv[, .(n = uniqueN(nro_inscripcion)), by = .(periodo_dt, producto, grupo)]
@@ -2233,6 +2480,7 @@ cmp <- merge(
   by = c("regime", "producto", "grupo"))
 cmp <- cmp[grupo != "Otras"]
 setorder(cmp, producto, grupo, regime)
+# Averaged over the months inside each regime, not computed on pooled volume.
 tab30 <- cmp[, .(Producto = producto, Regimen = as.character(regime), Grupo = grupo,
                  `Share en bocas (%)` = round(sb, 1),
                  `Share en volumen (%)` = round(sv, 1),
@@ -2245,6 +2493,7 @@ save_tex_table(tab30, fs::path(DIR_TABLES, "30_shares_volumen_vs_bocas.tex"),
                   "régimen. Muestra: nafta súper y gasoil grado 2, canal al público."),
   label = "shares_vol_bocas")
 
+# figQ2 shows YPF alone; the other groups are in table 30.
 ypf <- rbind(nat_vol[grupo == "YPF", .(periodo_dt, producto, share, medida = "Share en VOLUMEN")],
              nat_boc[grupo == "YPF", .(periodo_dt, producto, share, medida = "Share en BOCAS")])
 gQ2 <- ggplot(ypf, aes(periodo_dt, share, color = medida)) +
@@ -2268,12 +2517,17 @@ pmv[, firma := fifelse(grupo == "Blancas",
                       paste0("BLANCA::", fifelse(is.na(cuit) | trimws(cuit) == "",
                                                  as.character(nro_inscripcion), as.character(cuit))),
                       as.character(bandera))]
+# Shares are within province x department x product x month; nucleo travels
+# along only as the label for the region split below.
 hh <- pmv[, .(vol = sum(vol)), by = .(provincia, departamento, nucleo, producto, periodo_dt, firma)]
 hh[, s := vol / sum(vol), by = .(provincia, departamento, producto, periodo_dt)]
 hhi <- hh[, .(hhi = 10000 * sum(s^2), nfirmas = .N),
           by = .(provincia, departamento, nucleo, producto, periodo_dt)]
 hhi[, regime := regime_of(periodo_dt)]
 
+# Table 31 reports the median market rather than the average, and turns the
+# index into an equivalent number of equal-sized firms, 10,000 / HHI, which is
+# easier to read.
 tab31 <- hhi[, .(`HHI mediano` = as.numeric(round(median(hhi))),
                  `Firmas equivalentes` = round(10000 / median(hhi), 2),
                  `Firmas por mercado (mediana)` = as.numeric(median(nfirmas)),
@@ -2293,6 +2547,7 @@ cat("\nMedian HHI by regime\n")
 print(dcast(hhi[, .(hhi = as.numeric(round(median(hhi)))), by = .(regime, nucleo, producto)],
             producto + nucleo ~ regime, value.var = "hhi"))
 
+# The median market of each region and month, which is the line figQ3 draws.
 hhi_m <- hhi[, .(hhi = median(hhi)), by = .(nucleo, producto, periodo_dt)]
 gQ3 <- ggplot(hhi_m, aes(periodo_dt, hhi, color = nucleo)) +
   geom_hline(yintercept = 2500, linetype = "dotted", color = "grey40") +
@@ -2307,6 +2562,10 @@ gQ3 <- ggplot(hhi_m, aes(periodo_dt, hhi, color = nucleo)) +
 ggsave(fs::path(DIR_TMP, "figQ3_hhi_volumen_nucleo_periferia.png"), gQ3, width = 9, height = 6, dpi = 200)
 
 # Q4. Outlet size: monthly volume per outlet (table 32, figQ4) ----
+# How large an outlet is, measured by the volume it sells in a month:
+# percentiles by brand group in table 32, the whole density on a log scale in
+# figQ4. This feeds the market size of the demand model, so the cap above bears
+# directly on it.
 tab32 <- pmv[grupo != "Otras",
             .(`Boca-mes` = .N, `p25` = round(quantile(vol, .25)), `Mediana` = round(median(vol)),
               `p75` = round(quantile(vol, .75)), `p95` = round(quantile(vol, .95))),
@@ -2330,6 +2589,8 @@ gQ4 <- ggplot(pmv[grupo != "Otras"], aes(x = vol, fill = grupo)) +
 ggsave(fs::path(DIR_TMP, "figQ4_tamano_boca.png"), gQ4, width = 9, height = 6, dpi = 200)
 
 # Copy figures to the output folder ----
+# The four figures are copied in one call; the count printed below is how many
+# of them arrived.
 figs <- c("figQ1_huecos_panel.png", "figQ2_share_ypf_volumen_vs_bocas.png",
           "figQ3_hhi_volumen_nucleo_periferia.png", "figQ4_tamano_boca.png")
 ok <- file.copy(fs::path(DIR_TMP, figs), fs::path(DIR_FIGURES, figs), overwrite = TRUE)
@@ -2344,6 +2605,16 @@ cat("figures copied:", sum(ok), "/", length(figs), "to", as.character(DIR_FIGURE
 #
 # Input:  eess_all_cleaned7_alternative_sinceappearance_con_crosswalk.rds
 # Output: tables 33-34 (Tablas/), figC1 and figC2 (Gráficos/)
+#
+# The question behind the section is which characteristics can identify a taste
+# coefficient. Anything that varies only between markets is absorbed by the
+# market fixed effect; only what varies between the outlets of one market-month
+# identifies substitution. C1 asks how often each characteristic varies inside
+# a market, C2 splits its variance into the two parts, and C3 looks at the one
+# characteristic that has to be read out of the address text.
+#
+# Every characteristic comes from the panel itself: the bandera, the business
+# type, the operator name and the address.
 
 # Paths ----
 FILE_BASE   <- fs::path(DIR_INPUT, "eess_all_cleaned7_alternative_sinceappearance_con_crosswalk.rds")
@@ -2353,6 +2624,7 @@ DIR_TMP <- fs::path(tempdir(), "figs_bloqueC"); fs::dir_create(DIR_TMP, recurse 
 fs::dir_create(DIR_TABLES, recurse = TRUE); fs::dir_create(DIR_FIGURES, recurse = TRUE)
 if (!fs::file_exists(FILE_BASE)) stop("Input file with crosswalk not found: ", FILE_BASE)
 
+# Defined again so that the section runs on its own; same writer as above.
 save_tex_table <- function(df, file_path, caption = NULL, label = NULL, align = NULL) {
   tex <- knitr::kable(df, format = "latex", booktabs = TRUE, longtable = FALSE,
                       linesep = "", escape = TRUE, caption = caption, label = label, align = align)
@@ -2381,6 +2653,8 @@ f[, vol := suppressWarnings(as.numeric(as.character(volumen)))]
 f[, precio := suppressWarnings(as.numeric(as.character(precio_sin_impuestos)))]
 f <- f[!is.na(vol) & vol>0]
 f[, mercado := paste0(provincia,"||",departamento)]
+# dual marks outlets that also sell CNG, co those run by the chain itself
+# rather than by a dealer, and ruta those whose address is on a highway.
 f[, dual := grepl("Duales", tipo_negocio_h_since)]
 f[, co   := grepl(CO_PAT, toupper(operador))]
 f[, ruta := grepl(RUTA_PAT, toupper(iconv(as.character(direccion),"","ASCII//TRANSLIT")))]
@@ -2391,6 +2665,8 @@ f[, region := fifelse(provincia %in% NUCLEO,"Núcleo","Periferia")]
 # market-month.
 bm <- f[, .(vol=sum(vol), bandera=bandera[1], grupo=grupo[1], region=region[1],
             dual=any(dual), co=any(co), ruta=any(ruta)), by=.(nro_inscripcion, mercado, periodo_dt)]
+# mm identifies a market-month and nboc is how many outlets it holds. The
+# blocks below keep only the market-months with at least two.
 bm[, mm := paste0(mercado,"||",periodo_dt)][, nboc := uniqueN(nro_inscripcion), by=mm]
 
 # C1. Inventory of characteristics (table 33) ----
@@ -2399,6 +2675,7 @@ bm[, mm := paste0(mercado,"||",periodo_dt)][, nboc := uniqueN(nro_inscripcion), 
 # identified from substitution within the market.
 mk2 <- bm[nboc>=2, .(v_bandera=uniqueN(bandera)>=2, v_dual=uniqueN(dual)>=2,
                      v_co=uniqueN(co)>=2, v_ruta=uniqueN(ruta)>=2), by=mm]
+# Formats one of those shares as a LaTeX percentage for the table.
 pm_ <- function(col) sprintf("%.1f\\%%", 100*mean(mk2[[col]]))
 tab33 <- data.table(
   `Característica` = c("Bandera (marca)","Ubicación ruta/urbano","Dual GNC (ofrece GNC)",
@@ -2421,9 +2698,15 @@ save_tex_table(tab33, fs::path(DIR_TABLES, "33_inventario_caracteristicas.tex"),
   label = "inventario", align = "llll")
 
 # C2. Within/between decomposition (figC1) ----
+# Splits the variance of each characteristic into a within-market and a
+# between-market part, over market-months with at least two outlets. figC1
+# ranks the characteristics by the within share: the larger it is, the better
+# identified the taste coefficient.
 bm[, `:=`(is_ypf=as.numeric(bandera=="YPF"), is_blanca=as.numeric(bandera %in% BLANCA), lvol=log(vol))]
 d <- bm[nboc>=2]
 # Share of the variance of x that is within groups g
+# One minus the between-group sum of squares over the total sum of squares,
+# with the groups being market-months.
 within_share <- function(x,g){ dt<-data.table(x=as.numeric(x),g=g); gm<-dt[,.(m=mean(x),n=.N),by=g]
   gr<-mean(dt$x); 1 - sum(gm$n*(gm$m-gr)^2)/sum((dt$x-gr)^2) }
 vars <- c(`Marca: es YPF`="is_ypf",`Marca: es blanca`="is_blanca",`Tamaño (log volumen)`="lvol",
@@ -2451,15 +2734,23 @@ gC1 <- ggplot(resl, aes(frac, caracteristica, fill=parte)) +
 ggsave(fs::path(DIR_TMP,"figC1_within_between.png"), gC1, width=9, height=4.4, dpi=200)
 
 # C3. Highway vs. urban location (figC2, table 34) ----
+# Highway location, the one characteristic read out of free text. An outlet
+# counts as a highway station if any of its months is flagged, so the
+# classification does not move over time. Table 34 is the share by brand group
+# and region; the console line beside it is the price gap between highway and
+# urban stations, which the subtitle of figC2 refers to.
 boca <- f[, .(ruta=any(ruta), grupo=grupo[1], region=region[1]), by=nro_inscripcion]
 tabR <- boca[grupo!="Otras", .(pct=round(100*mean(ruta),1)), by=.(grupo, region)]
 tab34 <- dcast(tabR, grupo ~ region, value.var="pct")
 setnames(tab34, "grupo", "Grupo")
 setcolorder(tab34, c("Grupo","Núcleo","Periferia"))
+# Rows put in the order the thesis reads them, YPF first.
 tab34 <- tab34[match(c("YPF","Privadas grandes","Blancas"), Grupo)]
 cat("\nC3. Table 34 (highway location)\n"); print(tab34)
 # Price gap between highway and urban stations, in locality x product x month
 # cells that have both. Gaps of 40% or more in absolute value are dropped.
+# One cell per locality, product and month that holds at least one station of
+# each kind, so the comparison stays inside a local market.
 fp <- f[!is.na(precio) & precio>0]
 cell <- fp[, .(p_ruta=mean(precio[ruta]), p_urb=mean(precio[!ruta]), n_r=sum(ruta), n_u=sum(!ruta)),
            by=.(provincia, localidad, producto, periodo_dt, region)][n_r>0 & n_u>0]
@@ -2513,6 +2804,15 @@ cat("\nOutput\ntables 33-34 written to", as.character(DIR_TABLES),
 # of SESCO imports of Nafta Grado 2 (Súper) and Grado 3 (Ultra), weighted by m3.
 # Parity is observed in 2010-24. Months without imports and 2004-09 are projected
 # from ln(parity) = a + b * ln(FOB), fitted on the observed months.
+#
+# The figures all ask the same question from different angles: how far the pump
+# price sat from what the fuel cost to buy abroad, and when that distance
+# opened and closed. K1 uses crude, K2 refined gasoline at the US Gulf Coast,
+# K3 the parity of actual imports, and K4 sets the parity gap against the
+# policy episodes of the period.
+#
+# The price is a median across outlets, not volume-weighted, so the series
+# describes the typical station rather than the typical litre.
 
 pdf(NULL)  # keeps ggplotGrob() from leaving an Rplots.pdf in the working directory
 
@@ -2532,9 +2832,15 @@ regime_of <- function(d) factor(
    fifelse(d <  as.Date("2017-10-01"), "Estatal·regulado",
     fifelse(d <  as.Date("2019-08-01"), "Estatal·desreg.", "Estatal·congel."))),
   levels=c("YPF privada","Estatal·regulado","Estatal·desreg.","Estatal·congel."))
+# Litres in a barrel and in a US gallon; every reference is divided by one of
+# them to reach dollars per litre.
 L_BBL <- 158.987; L_GAL <- 3.78541
 
 # 5.1 Monthly price of regular gasoline (national median, retail channel) ----
+# One row per month: the median pre-tax price across outlets selling to the
+# public, the median tax-inclusive price beside it, and how many outlets are
+# behind each median. The median, so that a handful of misreported prices
+# cannot move the series.
 b <- readRDS(FILE_BASE); setDT(b)
 s <- b[canal_de_comercializacion=="Al público" & producto==PROD_SUPER]
 rm(b); invisible(gc())
@@ -2546,6 +2852,8 @@ ps <- s[, .(p_sin_ars=median(p_sin), p_con_ars=median(p_con[!is.na(p_con) & p_co
 cat("Regular gasoline price:", nrow(ps), "months,", format(min(ps$mes)), "-", format(max(ps$mes)), "\n")
 
 # 5.2 National series and FOB USGC ----
+# covar_series_nacionales.csv carries the official A3500 exchange rate, Brent
+# and the CPI; the FRED file the USGC gasoline price in dollars per gallon.
 sn <- fread(fs::path(DIR_COV, "covar_series_nacionales.csv"))
 sn[, mes := as.Date(mes)]
 fob <- fread(fs::path(DIR_COV, "raw_series/usgc_gasolina_fob_fred.csv"))
@@ -2555,7 +2863,11 @@ setnames(fob, c("mes","fob_usd_gal")); fob[, mes := as.Date(mes)]
 blue <- fread(fs::path(DIR_COV, "raw_series/dolar_blue_mensual_ambito.csv"))[, .(mes=as.Date(mes), tc_blue=blue_venta_prom)]
 
 # 5.3 Observed import parity (SESCO imports of súper and ultra gasoline) ----
+# Import parity taken straight from the trade data: the unit value of the
+# gasoline actually imported, dollars per cubic metre, month by month.
 ce <- fread(fs::path(DIR_COV, "covar_sesco_comercio_ext.csv"))
+# The two grades are pooled and the unit value is total dollars over total
+# cubic metres, so it is weighted by the size of each shipment.
 par_obs <- ce[tipo=="Importación" & producto %in% c("Nafta Grado 2 (Súper)(m3)","Nafta Grado 3 (Ultra)(m3)") &
               cantidad>0 & monto_usd>0,
               .(paridad_usd_m3 = sum(monto_usd)/sum(cantidad), m3_impo=sum(cantidad)),
@@ -2565,11 +2877,18 @@ par_obs <- par_obs[paridad_usd_m3 >= 200 & paridad_usd_m3 <= 2000]
 cat("Observed parity:", nrow(par_obs), "months between", format(min(par_obs$mes)), "and", format(max(par_obs$mes)), "\n")
 
 # 5.4 Monthly panel ----
+# Everything joined on the month, with the pump price converted at both
+# exchange rates and every reference put in dollars per litre. The stopifnot()
+# guards the joins: a missing rate or reference would pass silently and break a
+# ratio further down.
 d <- merge(ps, sn[, .(mes, tc=tc_a3500_prom, brent_usd_bbl, ipc_2004_100)], by="mes", all.x=TRUE)
 d <- merge(d, fob, by="mes", all.x=TRUE)
 d <- merge(d, par_obs, by="mes", all.x=TRUE)
 d <- merge(d, blue, by="mes", all.x=TRUE)
 stopifnot(!anyNA(d$tc), !anyNA(d$tc_blue), !anyNA(d$brent_usd_bbl), !anyNA(d$fob_usd_gal))
+# Both conversions are kept, super_usd_of at the official rate and super_usd_bl
+# at the parallel one. super_usd_l is the series the figures draw, and it is
+# switched between the two.
 d[, `:=`(super_usd_of = p_sin_ars/tc,      super_con_usd_of = p_con_ars/tc,        # official A3500 rate
          super_usd_bl = p_sin_ars/tc_blue, super_con_usd_bl = p_con_ars/tc_blue,   # parallel rate
          brent_usd_l = brent_usd_bbl/L_BBL, fob_usd_l = fob_usd_gal/L_GAL,
@@ -2578,6 +2897,9 @@ d[, super_usd_l := super_usd_bl]   # main conversion is the parallel rate; the f
 
 # Projected parity: ln(parity) on ln(FOB), fitted on the observed months. The
 # fit on Brent is only printed for comparison.
+# Both fits are printed, but only the one on the FOB price fills the months
+# without imports; paridad_fuente records which months are observed and which
+# are projected.
 fit_fob   <- lm(log(paridad_obs_usd_l) ~ log(fob_usd_l),   data=d[!is.na(paridad_obs_usd_l)])
 fit_brent <- lm(log(paridad_obs_usd_l) ~ log(brent_usd_l), data=d[!is.na(paridad_obs_usd_l)])
 cat("\nParity fit (observed months, n =", sum(!is.na(d$paridad_obs_usd_l)), ")\n")
@@ -2589,6 +2911,8 @@ d[, paridad_fuente := fifelse(is.na(paridad_obs_usd_l), "proyectada", "observada
 d[, regime := regime_of(mes)]
 
 # 5.5 Figures K1-K3 ----
+# figK1 to figK3 come out of one function: the same two-panel layout with a
+# different reference each time, levels on top and the ratio or the gap below.
 COL_SUPER <- "#1F3864"; COL_REF <- "#C55A11"
 LAB_SUPER <- "Súper sin impuestos (mediana nacional)"
 theme_k <- theme_minimal(base_size=11) + theme(legend.position="bottom", plot.title=element_text(face="bold"),
@@ -2603,12 +2927,18 @@ stack2 <- function(top, bottom, heights=c(1.15, 1)) {
   p2 <- g2$layout[g2$layout$name=="panel", "t"]; g2$heights[p2] <- grid::unit(heights[2], "null")
   rbind(g1, g2, size="first")
 }
+# stack2() returns a gtable, so it is drawn to a png device rather than handed
+# to ggsave().
 save_stack <- function(g, path, width=10, height=7.5, dpi=150) {
   png(path, width=width, height=height, units="in", res=dpi); grid::grid.draw(g); dev.off()
 }
+# Shared by every figure below: the date axis and the three regime lines.
 xdate <- scale_x_date(date_breaks="2 years", date_labels="%Y")
 vregs <- geom_vline(data=REGS, aes(xintercept=x), linetype="dashed", color="grey45", linewidth=.3)
 
+# lv stacks the pump price and the reference as two long series for the top
+# panel; rt is the ratio or the gap drawn underneath. The top panel drops its
+# x labels because the bottom one carries the axis.
 mk_fig <- function(ref_col, ref_lab, title, subtitle, ratio_lab, ratio_is_gap=TRUE, pts=NULL) {
   lv <- rbind(d[, .(mes, serie=LAB_SUPER, y=super_usd_l)],
               d[, .(mes, serie=ref_lab, y=get(ref_col))])
@@ -2631,10 +2961,15 @@ mk_fig <- function(ref_col, ref_lab, title, subtitle, ratio_lab, ratio_is_gap=TR
 # Each figure is drawn twice, at the parallel and at the official exchange rate
 CONV <- list(paralelo = list(col="super_usd_bl", suf="",            tc_lab="dólar paralelo (blue)"),
              oficial  = list(col="super_usd_of", suf="_tc_oficial", tc_lab="TC oficial A3500"))
+# The loop overwrites super_usd_l on d; the assignment right after it puts the
+# parallel-rate series back, which K4 and the diagnostics then use.
 for (cv in names(CONV)) {
   d[, super_usd_l := get(CONV[[cv]]$col)]
   SUB <- paste0("Precio sin impuestos de la nafta súper, mediana entre bocas al público, en USD/litro (", CONV[[cv]]$tc_lab, ").",
                 "\nLíneas punteadas: 2012 estatización de YPF, 2017 desregulación, 2019 congelamiento.")
+  # The three references in order: crude, refined gasoline at the US Gulf
+  # Coast, and the parity of actual imports. K1 shows a ratio, K2 and K3 a
+  # percentage gap.
   gK1 <- mk_fig("brent_usd_l", "Brent (USD por litro de crudo)",
                 "K1 · Nafta súper vs. Brent",
                 paste0(SUB, " Abajo: cociente súper / Brent, por litro."),
@@ -2666,6 +3001,8 @@ d[, super_usd_l := super_usd_bl]
 # September 2017); free prices (October 2017 to July 2019); price freezes,
 # exchange controls and a de facto barril criollo (DNU 566/2019, Decree 488/2020,
 # Precios Justos); liberalization (December 2023).
+# figK4 is the lower panel of figK3 on its own, drawn over the whole period so
+# that the gap can be read episode by episode.
 EPIS <- data.table(
   ini = as.Date(c("2004-12-01","2007-11-01","2015-01-01","2017-10-01","2019-08-01","2023-12-01")),
   fin = as.Date(c("2007-10-31","2014-12-31","2017-09-30","2019-07-31","2023-11-30","2024-12-31")),
@@ -2676,7 +3013,9 @@ EPIS <- data.table(
           "ago-2019 a nov-2023\nCongelamientos, cepo,\nbarril criollo de hecho",
           "2024\nLiberación"),
   signo = c("neg","neg","pos","cero","neg","cero"))
+# The label of each episode is written at the midpoint of its band.
 EPIS[, x := ini + (fin - ini)/2]
+# Computed at the parallel rate, the conversion the subtitle names.
 gap <- d[, .(mes, brecha = super_usd_bl/paridad_usd_l - 1)]
 ytop <- 1.5
 gK4 <- ggplot() +
@@ -2695,6 +3034,8 @@ ggsave(fs::path(DIR_TMP, "figK4_brecha_episodios.png"), gK4, width=10, height=5.
 ok <- file.copy(fs::path(DIR_TMP, "figK4_brecha_episodios.png"), fs::path(DIR_FIG, "figK4_brecha_episodios.png"), overwrite=TRUE)
 cat("saved: figK4_brecha_episodios.png | copied to output folder:", ok, "\n")
 cat("\nGap over parity by episode (median, min, max; parallel rate)\n")
+# findInterval() assigns each month to the episode it starts in, so the printed
+# table lines up with the shaded bands.
 gap[, epi := EPIS$lab[findInterval(mes, EPIS$ini)]]
 print(gap[, .(meses=.N, mediana=percent(median(brecha),1), min=percent(min(brecha),1), max=percent(max(brecha),1)), by=.(epi=substr(gsub("\n"," · ",epi),1,40))])
 
@@ -2738,11 +3079,16 @@ save_stack(gK1b, fs::path(DIR_TMP, "figK1b_super_vs_brent_pesos.png"), height = 
 ok <- file.copy(fs::path(DIR_TMP, "figK1b_super_vs_brent_pesos.png"), fs::path(DIR_FIG, "figK1b_super_vs_brent_pesos.png"), overwrite = TRUE)
 cat("saved: figK1b_super_vs_brent_pesos.png | copied to output folder:", ok, "\n")
 cat("\nK1b: annual change (%) of the pump price and of Brent, both in pesos, by year\n")
+# December-to-December change, so the comparison is of end-of-year levels.
 yr <- d[, .(super = last(p_sin_ars), brent_of = last(brent_ars_of), brent_bl = last(brent_ars_bl)), by = .(anio = year(mes))]
 yr[, `:=`(d_super = round(100 * (super / shift(super) - 1)), d_brent_of = round(100 * (brent_of / shift(brent_of) - 1)), d_brent_bl = round(100 * (brent_bl / shift(brent_bl) - 1)))]
 print(yr[!is.na(d_super), .(anio, d_super, d_brent_of, d_brent_bl)])
 
 # 5.6 Monthly series (CSV, kept for reuse) and diagnostics ----
+# serie_super_vs_costos.csv holds every series the figures use at monthly
+# frequency, so a number quoted in the text does not have to be recomputed.
+# The three console blocks that follow are those numbers: correlations in logs,
+# then medians by regime and by year.
 out <- d[, .(mes, regime, bocas, tc_a3500=tc, tc_blue, p_super_sin_ars_l=p_sin_ars, p_super_con_ars_l=p_con_ars,
              super_sin_usd_l_blue=super_usd_bl, super_con_usd_l_blue=super_con_usd_bl,
              super_sin_usd_l_oficial=super_usd_of, super_con_usd_l_oficial=super_con_usd_of, brent_usd_bbl, brent_usd_l,

@@ -8,9 +8,9 @@ The design is described in [docs/research_proposal.md](docs/research_proposal.md
 
 This repository contains the data work the estimation builds on: the station-level panel, the geocoding of stations, spatial and market-level covariates, and the descriptive analysis.
 
-![Price gap between YPF and large private brands](docs/figures/ypf_private_price_gap.png)
+![YPF against the private brands, by regime](docs/figures/ypf_private_gap_by_regime.png)
 
-*Median gap between YPF and the large private brands for the same product, locality and month (pre-tax price at the pump). Negative values mean YPF is cheaper. Dashed lines mark the 2012 renationalization, the 2017 price deregulation and the 2019 price freeze. Drawn by section 2 of `code/10_descriptives.R` as `fig1_gap_ypf_vs_privadas.png`.*
+*Mean price gap against the large private brands, within the same locality and month, by pricing regime and product. Dark points are YPF, green points the unbranded outlets, with 95% confidence intervals clustered by locality. YPF sells below the private brands throughout, and by more while prices were administered. Drawn by section 2 of `code/10_descriptives.R` as `figR3_R3_gap_condicional_IC.png`.*
 
 ## Data
 
