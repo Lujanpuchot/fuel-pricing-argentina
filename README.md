@@ -47,14 +47,16 @@ Each script reads the file the previous one wrote and saves its own, so the pipe
 
 ### 1. Building the panel
 
-| Script | What it does | Rows after |
-|---|---|---:|
-| `01_build_panel.R` | Joins the six raw files, harmonizes period and variable names | 5,346,549 |
-| `02_clean_volume.R` | Parses volume, sets implausibly large values to missing, drops records with missing or negligible volume | 5,289,163 |
-| `03_clean_prices.R` | Drops records with extreme pre-tax prices | 5,287,478 |
-| `04_deduplicate.R` | Removes exact duplicates across and within source files | 5,054,907 |
-| `05_business_type.R` | Infers the type of outlet from the products it sells and harmonizes it over time | 5,054,907 |
-| `06_markets.R` | Assigns every locality to a department and adds that column to the panel | 5,054,907 |
+| Script | What it does | Saves | Rows after |
+|---|---|---|---:|
+| `01_build_panel.R` | Joins the six raw files, harmonizes period and variable names | `eess_all_rawbind_2` | 5,346,549 |
+| `02_clean_volume.R` | Parses volume, sets implausibly large values to missing, drops records with missing or negligible volume | `eess_all_cleaned3_cut` | 5,289,163 |
+| `03_clean_prices.R` | Drops records with extreme pre-tax prices | `eess_all_cleaned4_cut` | 5,287,478 |
+| `04_deduplicate.R` | Removes exact duplicates across and within source files | `eess_all_cleaned5_cut` | 5,054,907 |
+| `05_business_type.R` | Infers the type of outlet from the products it sells and harmonizes it over time | `eess_all_cleaned7_alternative_sinceappearance` | 5,054,907 |
+| `06_markets.R` | Assigns every locality to a department and adds that column to the panel | `..._con_crosswalk` | 5,054,907 |
+
+The files are numbered in the order they are written, and `_cut` marks the steps that drop records rather than only flagging them. Each one is a `.rds` in the interim folder, so the pipeline can restart at any step. The last row is the analysis panel.
 
 Departments are the markets of the demand model: 1,398 localities over 458 departments, with the City of Buenos Aires as a single market. With localities as markets, close to half of them have a single brand; with departments, the share of stations in single-brand markets falls from 11.5% to 2.2%. The crosswalk is in [data/](data/), so this step runs without calling the API.
 
