@@ -108,9 +108,9 @@ cat("Columns:", ncol(eess), "\n")
 norm_txt <- function(x) {
   x <- as.character(x)
   x <- iconv(x, from = "", to = "ASCII//TRANSLIT")
-  x <- tolower(trimws(x))
+  x <- tolower(x)
   x <- gsub("[[:punct:]]", " ", x)
-  x <- gsub("\\s+", " ", x)
+  x <- trimws(gsub("\\s+", " ", x))
   x
 }
 
@@ -136,7 +136,7 @@ save_tex_table <- function(df, file_path, caption = NULL, label = NULL, align = 
     linesep = "",
     escape = TRUE,
     caption = caption,
-    label = label,
+    label = if (is.null(label)) NULL else sub("^tab:", "", label),
     align = align
   )
   writeLines(tex, con = file_path)
@@ -892,8 +892,8 @@ tabla_10 <- data.table(
 )
 
 for (tt in tipos_h) {
-  n_vec <- tabla_10_counts[[tt]]
-  s_vec <- tabla_10_shares[[tt]]
+  n_vec <- if (tt %in% names(tabla_10_counts)) tabla_10_counts[[tt]] else rep(0L, nrow(tabla_10_counts))
+  s_vec <- if (tt %in% names(tabla_10_shares)) tabla_10_shares[[tt]] else rep(0, nrow(tabla_10_shares))
   tabla_10[, (tt) := paste0(fmt_n(n_vec), " (", fmt_pct(s_vec), ")")]
 }
 
@@ -935,8 +935,8 @@ tabla_11 <- data.table(
 )
 
 for (tt in tipos_raw) {
-  n_vec <- tabla_11_counts[[tt]]
-  s_vec <- tabla_11_shares[[tt]]
+  n_vec <- if (tt %in% names(tabla_11_counts)) tabla_11_counts[[tt]] else rep(0L, nrow(tabla_11_counts))
+  s_vec <- if (tt %in% names(tabla_11_shares)) tabla_11_shares[[tt]] else rep(0, nrow(tabla_11_shares))
   tabla_11[, (tt) := paste0(fmt_n(n_vec), " (", fmt_pct(s_vec), ")")]
 }
 
@@ -1750,7 +1750,7 @@ save_tex_longtable <- function(df, file_path, caption = NULL, label = NULL, alig
     linesep = "",
     escape = TRUE,
     caption = caption,
-    label = label,
+    label = if (is.null(label)) NULL else sub("^tab:", "", label),
     align = align
   )
   writeLines(tex, con = file_path)
@@ -2310,7 +2310,7 @@ if (!fs::file_exists(FILE_BASE)) stop("Input file with crosswalk not found: ", F
 save_tex_table <- function(df, file_path, caption = NULL, label = NULL, align = NULL) {
   tex <- knitr::kable(df, format = "latex", booktabs = TRUE, longtable = FALSE,
                       linesep = "", escape = TRUE, caption = caption,
-                      label = label, align = align)
+                      label = if (is.null(label)) NULL else sub("^tab:", "", label), align = align)
   writeLines(tex, con = file_path)
   cat("  saved:", basename(file_path), "\n")
 }
@@ -2628,7 +2628,8 @@ if (!fs::file_exists(FILE_BASE)) stop("Input file with crosswalk not found: ", F
 # Defined again so that the section runs on its own; same writer as above.
 save_tex_table <- function(df, file_path, caption = NULL, label = NULL, align = NULL) {
   tex <- knitr::kable(df, format = "latex", booktabs = TRUE, longtable = FALSE,
-                      linesep = "", escape = TRUE, caption = caption, label = label, align = align)
+                      linesep = "", escape = TRUE, caption = caption,
+                      label = if (is.null(label)) NULL else sub("^tab:", "", label), align = align)
   writeLines(tex, con = file_path); cat("  saved:", basename(file_path), "\n")
 }
 
@@ -2677,13 +2678,13 @@ bm[, mm := paste0(mercado,"||",periodo_dt)][, nboc := uniqueN(nro_inscripcion), 
 mk2 <- bm[nboc>=2, .(v_bandera=uniqueN(bandera)>=2, v_dual=uniqueN(dual)>=2,
                      v_co=uniqueN(co)>=2, v_ruta=uniqueN(ruta)>=2), by=mm]
 # Formats one of those shares as a LaTeX percentage for the table.
-pm_ <- function(col) sprintf("%.1f\\%%", 100*mean(mk2[[col]]))
+pm_ <- function(col) sprintf("%.1f%%", 100*mean(mk2[[col]]))
 tab33 <- data.table(
   `Característica` = c("Bandera (marca)","Ubicación ruta/urbano","Dual GNC (ofrece GNC)",
                       "Tamaño de boca","Company-op vs dealer","Grado (súper/premium/…)",
                       "Antigüedad (span)","Amenities (surtidores, shop, 24h)","Impuestos locales"),
-  `Cobertura` = c("100\\%","100\\%","100\\%","100\\%","100\\%","100\\%","100\\%",
-                  "no está","sólo 2024, <8\\%"),
+  `Cobertura` = c("100%","100%","100%","100%","100%","100%","100%",
+                  "no está","sólo 2024, <8%"),
   `Varía en el mercado` = c(pm_("v_bandera"), pm_("v_ruta"), pm_("v_dual"),
                            "continua (siempre)", pm_("v_co"), "dentro de la estación",
                            "casi siempre", "—", "—"),
