@@ -1,21 +1,27 @@
 # figure_readme.R
-# The two figures on the front page of the repository, in English. The figures of
-# the thesis stay in Spanish; these are drawn apart so that the front page can be
-# read by someone who does not read it.
+# The figures on the front page of the repository, in English. The figures of the
+# thesis stay in Spanish; these are drawn apart so that the front page can be read
+# by someone who does not read it.
 #
 # Figure 1 repeats the estimate of figure R3 of 10_descriptives.R, grouped by
 # government rather than by pricing regime, with the monthly series left visible
-# behind it. Figure 2 repeats figure K1 of section 5.
+# behind it. Figure 2 repeats figure K1 of section 5. Figure 3 is the market
+# structure of the last year, on the map.
 #
 # Input:  eess_all_cleaned7_alternative_sinceappearance.rds
+#         eess_all_cleaned7_alternative_sinceappearance_con_crosswalk.rds
+#         geocodificacion_final.csv (written by 07_geocode_stations.R)
 #         serie_super_vs_costos.csv (written by section 5 of 10_descriptives.R)
 # Output: docs/figures/ypf_private_gap_by_government.png
 #         docs/figures/pump_price_vs_brent.png
+#         docs/figures/single_brand_markets.png
 
 suppressPackageStartupMessages({
   library(data.table)
   library(ggplot2)
   library(scales)
+  library(sf)              # figure 3, the outline of the country
+  library(rnaturalearth)   # figure 3, the outline of the country
 })
 
 source("code/00_config.R")
@@ -207,3 +213,78 @@ if (!file.exists(SERIE)) {
   dev.off()
   cat("saved:", file.path(DIR_FIG, "pump_price_vs_brent.png"), "\n")
 }
+
+# Figure 3: who is alone in each market ----
+
+# Market structure in the last year of the panel. A department counts as served
+# by one brand when every outlet selling to the public in it reports the same
+# bandera, which is the definition used in the section of the README on captive
+# markets. Departments are drawn at the average position of their own outlets,
+# since the panel carries coordinates for the outlets and not boundaries.
+YEAR <- 2024L
+
+pan <- readRDS(file.path(DIR_INTERIM,
+  "eess_all_cleaned7_alternative_sinceappearance_con_crosswalk.rds"))
+setDT(pan)
+pan <- pan[canal_de_comercializacion == "Al público" & as.integer(anio) == YEAR]
+
+# The brand each outlet reported in most months of the year, as in 08
+act <- pan[, .(meses = uniqueN(periodo_dt)),
+         by = .(nro_inscripcion, bandera, departamento, provincia)]
+setorder(act, nro_inscripcion, -meses, bandera)
+act <- act[, .SD[1], by = nro_inscripcion]
+
+geo <- fread(file.path(DIR_INTERIM, "geocodificacion_final.csv"), encoding = "UTF-8")
+act <- merge(act, geo[, .(nro_inscripcion, lat, lon)], by = "nro_inscripcion", all.x = TRUE)
+
+dep <- act[, .(marcas = uniqueN(bandera), sola = bandera[1], bocas = .N,
+               lat = mean(lat, na.rm = TRUE), lon = mean(lon, na.rm = TRUE)),
+           by = .(provincia, departamento)]
+dep[, tipo := fifelse(marcas > 1, "More than one brand",
+              fifelse(sola == "YPF", "Only YPF", "Only another brand"))]
+dep[, tipo := factor(tipo, levels = c("Only YPF", "Only another brand", "More than one brand"))]
+
+una <- dep[marcas == 1]
+cat("\nMarket structure in", YEAR, "\n")
+print(dep[, .(departments = .N, outlets = sum(bocas)), by = tipo][order(tipo)])
+cat(sprintf("single-brand departments: %d of %d, YPF in %d of them (%.0f%%)\n",
+            nrow(una), nrow(dep), una[sola == "YPF", .N],
+            100 * una[sola == "YPF", .N] / nrow(una)))
+
+arg <- ne_countries(country = "Argentina", scale = "large", returnclass = "sf")
+nb  <- ne_countries(country = c("Chile", "Bolivia", "Paraguay", "Brazil", "Uruguay"),
+                    scale = "medium", returnclass = "sf")
+
+g3 <- ggplot() +
+  geom_sf(data = nb,  fill = "grey96", color = "grey88", linewidth = .2) +
+  geom_sf(data = arg, fill = "white",  color = "grey70", linewidth = .3) +
+  geom_point(data = dep[!is.na(lat) & tipo == "More than one brand"],
+             aes(lon, lat, color = tipo), size = 1, alpha = .45) +
+  geom_point(data = dep[!is.na(lat) & tipo != "More than one brand"],
+             aes(lon, lat, color = tipo), size = 1.9, alpha = .9) +
+  coord_sf(xlim = c(-74, -53), ylim = c(-55.2, -21.5), expand = FALSE) +
+  scale_color_manual(values = c("Only YPF" = "#1F3864",
+                                "Only another brand" = "#C55A11",
+                                "More than one brand" = "grey75"),
+                     breaks = c("Only YPF", "Only another brand", "More than one brand")) +
+  labs(title = "Two out of three single-brand markets are YPF's",
+       subtitle = sprintf(paste0("Of the %d departments with an outlet in %d, %d are served by a ",
+                                 "single\nbrand, and %d of those by YPF. Each dot sits at the ",
+                                 "average\nposition of the department's outlets."),
+                          nrow(dep), YEAR, nrow(una), una[sola == "YPF", .N]),
+       x = NULL, y = NULL, color = NULL) +
+  guides(color = guide_legend(override.aes = list(size = 2.2, alpha = 1))) +
+  theme_minimal(base_size = 11) +
+  theme(plot.title = element_text(face = "bold", size = 13),
+        plot.subtitle = element_text(color = "grey35", size = 9, lineheight = 1.25),
+        plot.title.position = "plot",
+        legend.position = "top", legend.justification = "left",
+        legend.margin = margin(t = 0, b = -2),
+        legend.text = element_text(size = 8.5),
+        legend.key.height = unit(11, "pt"),
+        panel.grid = element_blank(),
+        axis.text = element_blank())
+
+ggsave(file.path(DIR_FIG, "single_brand_markets.png"), g3,
+       width = 5.4, height = 7.2, dpi = 200)
+cat("saved:", file.path(DIR_FIG, "single_brand_markets.png"), "\n")
