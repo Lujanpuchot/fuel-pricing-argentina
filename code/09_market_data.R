@@ -8,8 +8,9 @@
 #         DIR_COVAR; some parts also read files written by earlier parts
 # Output: one covar_*.csv per block in DIR_COVAR
 #
-# Parts 1 and 2 build the department-level series and part 2 extends part 1,
-# so they run in that order; part 6 reads what parts 4 and 5 write.
+# Parts 1 and 2 build the department-level series, and part 2 extends part 1,
+# so they run in that order. Part 3 reads the dictionary part 1 writes, part 6
+# reads part 5, and part 8 reads parts 5 and 6.
 
 suppressPackageStartupMessages({
   library(data.table)
@@ -30,7 +31,7 @@ options(timeout = 120)
 #
 # Input:  CEP-XXI "Datos por departamento" CSVs (downloaded to raw_cep/ if missing)
 # Output: covar_ingreso_empleo_depto.csv,
-#         cep_diccionario_depto.csv (department dictionary, used by population.R)
+#         cep_diccionario_depto.csv (department dictionary, used by part 3)
 #
 # Source: CEP-XXI (Ministry of Production), built from SIPA/AFIP records.
 #   https://cdn.produccion.gob.ar/cdn-cep/datos-por-departamento/
@@ -82,7 +83,7 @@ setcolorder(D, c("fecha","anio","mes","codigo_departamento_indec","id_provincia_
                  "w_mean_total","w_mean_priv","puestos_total","puestos_priv"))
 setorder(D, codigo_departamento_indec, fecha)
 fwrite(D, fs::path(DIR,"covar_ingreso_empleo_depto.csv"), bom=TRUE)
-fwrite(dic, fs::path(DIR,"cep_diccionario_depto.csv"), bom=TRUE)   # read by population.R
+fwrite(dic, fs::path(DIR,"cep_diccionario_depto.csv"), bom=TRUE)   # read by part 3
 cat("[covar_ingreso_empleo_depto.csv]", nrow(D), "rows |", uniqueN(D$codigo_departamento_indec),
     "departments |", as.character(min(D$fecha)), "to", as.character(max(D$fecha)), "\n")
 cat("NA after recoding -99:", paste(valcols, sapply(valcols, function(c) sum(is.na(D[[c]]))), collapse=" | "), "\n")
@@ -92,7 +93,7 @@ cat("NA after recoding -99:", paste(valcols, sapply(valcols, function(c) sum(is.
 # Extends the department wage series to the whole sample period, 2004-01 to
 # 2024-12, with the wage series published by OEDE (Ministry of Labor).
 #
-# Input:  covar_ingreso_empleo_depto.csv (from wages_employment.R, not modified),
+# Input:  covar_ingreso_empleo_depto.csv (from part 1, not modified),
 #         cep_diccionario_depto.csv, two OEDE workbooks (downloaded if missing)
 # Output: covar_ingreso_empleo_depto_ext.csv
 #
@@ -323,7 +324,7 @@ print(ext[codigo_departamento_indec==2000 &
 # demand model.
 #
 # Input:  indec_proyeccion_departamentos_10_25.pdf (downloaded if missing),
-#         cep_diccionario_depto.csv (written by wages_employment.R)
+#         cep_diccionario_depto.csv (written by part 1)
 # Output: covar_poblacion_depto.csv
 #
 # Source: INDEC, "Estimaciones de población por sexo, departamento y año
@@ -341,7 +342,7 @@ print(ext[codigo_departamento_indec==2000 &
 
 dir.create(DIR, showWarnings=FALSE, recursive=TRUE)
 PDF  <- fs::path(DIR, "indec_proyeccion_departamentos_10_25.pdf")
-DICC <- fs::path(DIR, "cep_diccionario_depto.csv")   # written by wages_employment.R
+DICC <- fs::path(DIR, "cep_diccionario_depto.csv")   # written by part 1
 URL  <- "https://www.indec.gob.ar/ftp/cuadros/poblacion/proyeccion_departamentos_10_25.pdf"
 
 # Upper case without accents, to match department names across sources
@@ -452,7 +453,7 @@ print(chk[anio %in% c(2004,2007,2009,2010,2015,2022,2025)])
 
 # Variant of the department population series anchored to the 2022 census.
 #
-# Input:  covar_poblacion_depto.csv (from population.R, not modified),
+# Input:  covar_poblacion_depto.csv (from part 3, not modified),
 #         censo2022_vs_proyeccion_depto.csv
 # Output: covar_poblacion_depto_censal.csv, with both series (poblacion_proy and
 #         poblacion_censal)
@@ -816,7 +817,7 @@ cat("  USGC gasoline peak 2008:", pk("nafta_usgulf_usd_gal", 2008), "| peak 2022
 cat("  USGC diesel peak 2008:", pk("gasoil_usgulf_usd_gal", 2008), "| peak 2022:", pk("gasoil_usgulf_usd_gal", 2022), "\n")
 
 # External check: USGC gasoline against the import unit value of Nafta Grado 3
-# in SESCO. Runs only if sesco_downstream.R has already written its trade file.
+# in SESCO. Runs only if part 5 has already written its trade file.
 f_ce <- fs::path(DIR, "covar_sesco_comercio_ext.csv")
 if (fs::file_exists(f_ce)) {
   ce <- fread(f_ce, encoding="UTF-8")
@@ -1133,7 +1134,7 @@ if (file.exists(f20)) {
 # COTAB, in the second half of 2022 is not included). Ethanol: E5 from January
 # 2010; Res. 44/2014, 8.5% from March 2014, 9% from October, 9.5% from November
 # and 10% from December 2014; Decree 543/2016, 12% from April 2016, which Law
-# 8.27.640 keeps.
+# 27.640 keeps.
 corte <- function(anio, mes, grupo) {
   ym <- anio*100 + mes
   if (grupo == "nafta") fcase(ym < 201001, 0, ym < 201403, .05, ym < 201410, .085, ym < 201411, .09,

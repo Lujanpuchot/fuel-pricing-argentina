@@ -313,7 +313,8 @@ if (nzchar(Sys.getenv("GEO_PARSE_ONLY"))) {
     data.table(original = substr(pend$direccion[i], 1, 34),
                calle = substr(z$calle, 1, 26), altura = z$altura)
   }))
-  print(pr, nrows = 30); quit(status = 0)
+  print(pr, nrows = 30)
+  quit(status = 0)   # test mode ends the session: run this script on its own, not through run_all.R
 }
 
 # Structured query ----
@@ -404,9 +405,10 @@ cat("\nSecond pass done. Rescued:", n_ok, "of", nrow(pend), "\n")
 #   sin_dato      neither locality nor department
 #
 # The station-year panel of nearby rivals (variables_espaciales_panel.csv) is not
-# rebuilt here and stays on the exact subset. nearby_rivals_refinery.R builds it, and
-# writes variables_espaciales_estacion.csv again from the final coordinates.
-# Scripts 04 to 06 edit geocodificacion_final.csv in place: rerun them after this one.
+# rebuilt here and stays on the exact subset. Section 1 of 08_station_variables.R
+# builds it, and writes variables_espaciales_estacion.csv again from the final
+# coordinates, so that copy is the one to use.
+# Sections 4 to 6 below edit geocodificacion_final.csv in place.
 
 sf::sf_use_s2(TRUE)
 options(timeout = 60)
@@ -642,7 +644,7 @@ res <- fread(CACHE, encoding = "UTF-8")
 if (!is.na(.n_test) && .n_test > 0) {
   cat("\nTest mode results (nothing is overwritten)\n")
   print(res[, .(nro_inscripcion, d0, d1, found, detalle = substr(detalle,1,50))])
-  quit(status = 0)
+  quit(status = 0)   # as above: test mode ends the session
 }
 
 # Apply the decisions to geocodificacion_final.csv ----

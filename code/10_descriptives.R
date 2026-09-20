@@ -4,10 +4,11 @@
 # and shares, what stations look like, and the pump price against crude and
 # import parity.
 #
-# Input:  the analysis panel, with the department crosswalk from part 3 of
-#         08_station_variables.R, and the cost series from 09_market_data.R
+# Input:  the analysis panel. Sections 1 and 2 read it as 05_business_type.R
+#         saves it; sections 3 to 5 read the version with the department
+#         column that 06_markets.R saves, plus the cost series from 09_market_data.R
 # Output: LaTeX tables in <DIR_OUTPUT>/Tablas and figures in
-#         <DIR_OUTPUT>/Graficos
+#         <DIR_OUTPUT>/Gráficos
 #
 # Figures are written to a temporary folder first and copied afterwards,
 # because the sync client locks files while a plot is being written.

@@ -155,7 +155,7 @@ print(res[, .(mediana_d_rival = round(median(d_rival_min, na.rm = TRUE), 2),
 #         eess_all_cleaned7_alternative_sinceappearance_con_crosswalk.rds
 # Output: variables_refineria_marca.csv (station x year)
 #
-# d_refineria_km, from nearby_rivals_refinery.R, is the distance to the nearest
+# d_refineria_km, from section 1, is the distance to the nearest
 # refinery of any brand. A Shell station does not buy from YPF, though: the
 # relevant logistic cost is the distance to a refinery of its own chain, which is
 # what d_refineria_marca_km measures.
@@ -174,7 +174,7 @@ print(res[, .(mediana_d_rival = round(median(d_rival_min, na.rm = TRUE), 2),
 # This is an approximation: actual logistics run through dispatch terminals
 # (pipelines and coastal shipping), not only refineries. The variable captures
 # the origin of the chain; distance to the dispatch plants is built in
-# dispatch_plants.R.
+# section 3.
 
 sf_use_s2(TRUE)
 BASE <- file.path(INT, "eess_all_cleaned7_alternative_sinceappearance_con_crosswalk.rds")
@@ -258,7 +258,7 @@ print(mz[norm(provincia)=="MENDOZA", .(mediana_d_marca_km = round(median(d_refin
 #
 # Input:  precios_mayoristas_res1104.csv (wholesale prices and volumes, Res. 1104)
 #         centroides_localidad.csv, geocodificacion_final.csv,
-#         variables_refineria_marca.csv (from own_brand_refinery.R)
+#         variables_refineria_marca.csv (from section 2)
 # Output: plantas_despacho_marca.csv     geocoded roster of plants, by year
 #         variables_planta_estacion.csv  station x year, with d_planta_marca_km
 #
@@ -510,17 +510,17 @@ ubic <- g[precision %in% c("exacta","localidad") & !is.na(lat) & !is.na(lon)]
 cat("locatable stations:", nrow(ubic), "\n")
 pe <- st_as_sf(ubic, coords = c("lon","lat"), crs = 4326)
 
-# 2a. International border as a line ----
+# 5.2 International border as a line ----
 # Edge of the five neighboring countries; a secondary continuous variable. In the
 # east and center the nearest border is the Río de la Plata or the Río Uruguay,
 # which cannot be crossed by car, so the nearest country is not reported here.
-# For arbitrage use the crossings in 2b.
+# For arbitrage use the crossings in 5.3.
 vecinos <- c("Chile","Bolivia","Paraguay","Brazil","Uruguay")
 nb <- ne_countries(country = vecinos, scale = "large", returnclass = "sf")
 nbu <- st_union(nb)
 ubic[, d_frontera_km := round(as.numeric(st_distance(pe, nbu))/1000, 1)]
 
-# 2b. Nearest border crossing open to road traffic ----
+# 5.3 Nearest border crossing open to road traffic ----
 # The relevant variable for arbitrage: 22 international road crossings, including
 # the bridges to Uruguay.
 cruces <- data.table(
@@ -547,7 +547,7 @@ cat("d_cruce_km (road crossing): median", round(median(ubic$d_cruce_km)), "km |"
     "within 25 km of a crossing:", ubic[d_cruce_km < 25, .N], "stations\n")
 print(ubic[, .N, by = pais_cruce][order(-N)])
 
-# 5.3 Large cities ----
+# 5.4 Large cities ----
 # Cities above roughly 100,000 inhabitants; coordinates of the urban center.
 ciu <- data.table(
   ciudad = c("Buenos Aires","Córdoba","Rosario","La Plata","Mar del Plata","Tucumán",
@@ -570,12 +570,12 @@ ubic[, d_gba_km := round(as.numeric(st_distance(pe, gba))/1000, 0)]
 cat("\nd_ciudad_km: median", round(median(ubic$d_ciudad_km)), "km |",
     "d_gba_km: median", round(median(ubic$d_gba_km)), "km\n")
 
-# 5.4 Patagonia flag (Patagonian differential of the ICL) ----
+# 5.5 Patagonia flag (Patagonian differential of the ICL) ----
 PATAGONIA <- c("NEUQUEN","RIO NEGRO","CHUBUT","SANTA CRUZ","TIERRA DEL FUEGO")
 ubic[, patagonia_icl := as.integer(norm(provincia) %in% PATAGONIA)]
 cat("stations in Patagonia (ICL):", ubic[patagonia_icl==1, .N], "\n")
 
-# 5.5 Save ----
+# 5.6 Save ----
 out <- ubic[, .(nro_inscripcion, precision, provincia, localidad,
                 d_frontera_km, d_cruce_km, cruce_cercano, pais_cruce,
                 d_ciudad_km, ciudad_cercana, d_gba_km, patagonia_icl)]
@@ -593,7 +593,7 @@ print(out[, .(d_frontera_km = round(median(d_frontera_km)),
 #
 # Input:  localizadores_marcas.csv (the brands' station-locator listings)
 #         geocodificacion_final.csv
-#         variables_refineria_marca.csv (from own_brand_refinery.R)
+#         variables_refineria_marca.csv (from section 2)
 # Output: variables_shop_estacion.csv
 #
 # The match is spatial and within brand family: a YPF station of the panel is

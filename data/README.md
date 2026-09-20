@@ -13,7 +13,9 @@ The panel itself is not here: the raw and intermediate files add up to about 10 
 | `departamento` | Department it belongs to |
 | `fuente` | How the pair was resolved |
 
-1,398 pairs over 458 distinct (province, department) pairs. All are resolved except one, the placeholder `N/D`, which is left empty on purpose and should be dropped from the model. `fuente` records where each assignment comes from: 1,301 from the georef API of the national government, 58 from the audit of the first version, 34 from a manual dictionary for localities the API does not return, 3 from the City of Buenos Aires (treated as a single market), 1 isolated settlement with a single station and the `N/D` row.
+1,398 pairs over 457 departments. All are resolved except one, the placeholder `N/D`, which is left empty on purpose and should be dropped from the model.
+
+`fuente` records where each assignment comes from: 1,301 from the georef API of the national government, 58 corrected in the audit of the first version, 34 from a manual dictionary for localities the API does not return, 3 from the City of Buenos Aires (treated as a single market), 1 isolated settlement with a single station and the `N/D` row.
 
 `crosswalk_correcciones_auditoria.csv` (pipe separated) holds the 60 corrections applied after reviewing the first version, one row per locality, with the department assigned and the reason. Most of them repair an indexing bug in that first version, which had sent some localities to an unrelated province.
 
@@ -53,6 +55,32 @@ Source: [Precios en Surtidor, Resolución 314/2016](http://datos.energia.gob.ar/
 
 Section 5 and section 6 read these files from the interim folder if they are there, and otherwise from this folder, so the geocoding runs on a fresh clone. Sections 1 to 4 do not need them and already produce a coordinate for every station, at a lower share of exact matches: the two files take exact locations from about 66% to 88.6%.
 
-## The panel
+## The data tree
 
-The raw retail files (`public_vi_access_eess_*.rds`, one per period) come from the price and volume reports that outlets file with the Energy Secretariat under Resolution 1104/2004. The rest of the tree is described in the README at the root of the repository.
+`code/00_config.R` expects this layout under `ROOT`. The raw retail files (`public_vi_access_eess_*.rds`, one per period) are the price and volume reports that outlets file with the Energy Secretariat under Resolution 1104/2004; everything under `Intermedio/` is written by the pipeline.
+
+```
+Datos/Principal/Minoristas/Última versión/   raw retail files            DIR_RETAIL
+Datos/Principal/Minoristas/Última versión/Intermedio/                    DIR_INTERIM
+Datos/Principal/Minoristas/Última versión/Intermedio/covariables_mercado/ DIR_COVAR
+Datos/Principal/Mayoristas/                  wholesale prices            DIR_WHOLESALE
+Documentos/2. Gráficos y tablas descriptivas - new/  tables and figures  DIR_OUTPUT
+```
+
+## Inputs the pipeline expects and does not fetch
+
+Beyond the files above, several steps read data that is neither shipped here nor downloaded by the code. They were assembled by hand from public sources. Scripts 1 to 7 do not need any of them.
+
+| File | Needed by | What happens without it |
+|---|---|---|
+| `georef_departamentos_ref.csv` | `06_markets.R` | The check that every department belongs to its province is skipped, silently |
+| `precios_mayoristas_res1104.csv` | `08`, `09` | Dispatch plants and the wholesale margin cannot be built |
+| `raw_osm/osm_rutas_troncales.json` | `08` | The on-highway section stops |
+| `localizadores_marcas.csv` | `08` | The station amenities section stops |
+| `raw_sesco/` | `09` | The downstream section stops |
+| `censo2022_vs_proyeccion_depto.csv` | `09` | The census-anchored population variant stops |
+| `20f_ypf_extract.csv` | `09` | Refining cost falls back to a placeholder of 5 USD per barrel, flagged in the output but not an error |
+| `bio_precios_completado.csv` | `09` | Biofuel prices fall back to a fossil-cost fraction, flagged |
+| `raw_series/usgc_gasolina_fob_fred.csv`, `raw_series/dolar_blue_mensual_ambito.csv` | `10` | The price-against-costs figures cannot be drawn |
+
+The two fallbacks in `09_market_data.R` deserve attention: they let the script finish with a substituted value rather than stop, and the substitution reaches the cost series. The `fuente_*` columns of the output record when that happened.
