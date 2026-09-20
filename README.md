@@ -23,48 +23,53 @@ Raw and intermediate files add up to about 10 GB and are not part of the reposit
 ## Repository layout
 
 ```
+run_all.R                     runs the five scripts below, in order
 code/
-  00_config.R               paths, read from the FUEL_DATA_ROOT environment variable
-  01_build_panel/           raw files -> analysis panel
-  02_geocoding/             coordinates for the 8,720 stations
-  03_spatial_variables/     markets, rivals, distances, highway and border indicators
-  04_market_covariates/     population, wages, prices and costs at the market level
-  05_descriptives/          tables and figures
+  00_config.R                 paths, read from the FUEL_DATA_ROOT environment variable
+  01_clean_panel.R            raw files -> analysis panel, and the markets of the model
+  02_geocode_stations.R       coordinates for every outlet
+  03_station_variables.R      rivals, distances, highway and border indicators
+  04_market_data.R            population, wages, prices and costs by market
+  05_descriptives.R           tables and figures
+  diagnostics_data_quality.R  how the cleaning thresholds were chosen
 docs/
   research_proposal.md
   analysis_plan.md
   figures/
 ```
 
+Each script is divided into parts, marked with section headers, and each part reads the file the previous one wrote. A script can be restarted at any part.
+
 ### 1. Building the panel
 
-The scripts in `01_build_panel` run in order. Each one reads the file written by the previous one.
-
-| Script | What it does | Rows after |
+| Part of `01_clean_panel.R` | What it does | Rows after |
 |---|---|---:|
-| `01_bind_raw.R` | Binds the six raw files, harmonizes period and variable names | 5,346,549 |
-| `02_clean_volume.R` | Parses volume, sets implausibly large values to missing, drops records with missing or negligible volume | 5,289,163 |
-| `03_clean_prices.R` | Drops records with extreme pre-tax prices | 5,287,478 |
-| `04_deduplicate.R` | Removes exact duplicates across and within source files | 5,054,907 |
-| `05_business_type.R` | Infers the type of outlet from the products it sells and harmonizes it over time | 5,054,907 |
+| 1. Bind the raw files | Joins the six raw files, harmonizes period and variable names | 5,346,549 |
+| 2. Volume | Parses volume, sets implausibly large values to missing, drops records with missing or negligible volume | 5,289,163 |
+| 3. Prices | Drops records with extreme pre-tax prices | 5,287,478 |
+| 4. Duplicate records | Removes exact duplicates across and within source files | 5,054,907 |
+| 5. Type of outlet | Infers the type of outlet from the products it sells and harmonizes it over time | 5,054,907 |
+| 6. Markets | Assigns every locality to a department and adds that column to the panel | 5,054,907 |
 
-`diagnostics_volume_prices.R` is the long diagnostic pass on volumes and prices that informed the thresholds above. It does not modify the panel.
+Departments are the markets of the demand model. The crosswalk has 473 market units: departments, the City of Buenos Aires as a single market, and a few isolated settlements with one station. With localities as markets, close to half of them have a single brand; with departments, the share of stations in single-brand markets falls from 11.5% to 2.2%.
+
+`diagnostics_data_quality.R` is the diagnostic pass on volumes and prices behind the thresholds in parts 2 and 3. It does not modify the panel and `run_all.R` does not call it.
 
 ### 2. Geocoding
 
-The source has addresses but no coordinates. The scripts in `02_geocoding` run as a cascade: the georef API and Nominatim on the street address, a structured Nominatim search for the urban addresses that failed, kilometre posts for addresses of the form "Ruta 9 km 412", an audit of matches that landed in the wrong town because of common street names, and finally the official coordinates that the Energy Secretariat publishes for part of the stations, which take precedence. Every coordinate carries a precision label. 88.6% of stations end up with an exact location, 10.1% with the centroid of their locality, 0.9% with the centroid of their department, and 27 stations could not be located.
+The source has addresses but no coordinates. `02_geocode_stations.R` runs as a cascade: the georef API and Nominatim on the street address, a structured Nominatim search for the urban addresses that failed, kilometre posts for addresses of the form "Ruta 9 km 412", an audit of matches that landed in the wrong town because of common street names, and finally the official coordinates that the Energy Secretariat publishes for part of the stations, which take precedence. Every coordinate carries a precision label. 88.6% of stations end up with an exact location, 10.1% with the centroid of their locality, 0.9% with the centroid of their department, and 27 stations could not be located.
 
-### 3. Spatial variables
+### 3. Station variables
 
-`crosswalk_locality_department.R` assigns each locality to a department, which is the market definition used in the demand model. The crosswalk has 473 market units: departments, the City of Buenos Aires as a single market, and a few isolated settlements with one station. With localities as markets, close to half of them have a single brand; with departments, the share of stations in single-brand markets falls from 11.5% to 2.2%. The other scripts compute the number of nearby rivals, distance to the nearest refinery and to the refinery and dispatch plant of the station's own brand, distance to the border, a geometric on-highway indicator based on the OSM trunk network, and station amenities.
+The number of nearby rivals, distance to the nearest refinery and to the refinery and dispatch plant of the station's own brand, distance to the border, a geometric on-highway indicator based on the OSM trunk network, and station amenities. Each part writes its own file and none of them modifies the panel; they are merged in by key when the estimation sample is assembled.
 
-### 4. Market covariates
+### 4. Market data
 
-Population by department and year (market size), wages and employment by department and month, a consumer price index spliced from provincial indices for 2007-2015, when the official index is not reliable, Brent, the exchange rate, downstream sales and imports, moments from the household expenditure survey, and an upstream unit cost built in layers (crude, refining, biofuel blending).
+Population by department and year (market size), wages and employment by department and month, a consumer price index spliced from provincial indices for 2007-2015, when the official index is not reliable, Brent, the exchange rate, downstream sales and imports, moments from the household expenditure survey, and an upstream unit cost built in layers (crude, refining, biofuel blending). Most parts download their own source data and cache it.
 
 ### 5. Descriptives
 
-Market structure, brand shares, the YPF-private price gap, station characteristics, and the pump price against crude, US Gulf Coast gasoline and import parity.
+Market structure and brand shares, the YPF-private price gap, volumes and reporting gaps, station characteristics, and the pump price against crude, US Gulf Coast gasoline and import parity.
 
 ![Pump price of regular gasoline against Brent](docs/figures/pump_price_vs_brent.png)
 
@@ -82,7 +87,13 @@ One stretch of the volume cleaning had been lost and was rewritten from the save
 
 The scripts were written in R 4.5 and use `data.table`, `fs`, `readxl`, `openxlsx`, `ggplot2`, `scales`, `knitr`, `sf`, `rnaturalearth`, `jsonlite`, `httr` and `pdftools`.
 
-Set `FUEL_DATA_ROOT` to the folder that holds the data tree (for example in `~/.Renviron`) and run the scripts from the repository root, in the order of the folders. The geocoding scripts are slow because Nominatim allows one request per second. Set `FUEL_CONTACT_EMAIL` so that those requests identify you, as its usage policy asks.
+Set `FUEL_DATA_ROOT` to the folder that holds the data tree (for example in `~/.Renviron`), then from the repository root run
+
+```
+Rscript run_all.R
+```
+
+or the scripts one at a time, in order. Geocoding is slow because Nominatim allows one request per second; set `FUEL_CONTACT_EMAIL` so that those requests identify you, as its usage policy asks.
 
 Variable names follow the source data and are in Spanish. Comments are in English.
 

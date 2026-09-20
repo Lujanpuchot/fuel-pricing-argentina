@@ -1,4 +1,36 @@
-# 01_market_structure.R
+# 05_descriptives.R
+# Descriptive evidence on the retail fuel market: the structure of the market
+# and how it changed, the price gap between YPF and the private brands, volumes
+# and shares, what stations look like, and the pump price against crude and
+# import parity.
+#
+# Input:  the analysis panel, with the department crosswalk from part 3 of
+#         03_station_variables.R, and the cost series from 04_market_data.R
+# Output: LaTeX tables in <DIR_OUTPUT>/Tablas and figures in
+#         <DIR_OUTPUT>/Graficos
+#
+# Figures are written to a temporary folder first and copied afterwards,
+# because the sync client locks files while a plot is being written.
+
+suppressPackageStartupMessages({
+  library(data.table)
+  library(fs)
+  library(knitr)
+  library(ggplot2)
+  library(scales)
+})
+
+source("code/00_config.R")
+
+options(scipen = 999)
+
+DIR_OUT_NEW <- DIR_OUTPUT
+DIR_TABLES  <- fs::path(DIR_OUT_NEW, "Tablas")
+DIR_FIGURES <- fs::path(DIR_OUT_NEW, "Gráficos")
+DIR_INPUT   <- DIR_INTERIM
+
+# Part 1. Market structure ----
+
 # Descriptive tables and figures on market structure from the final analysis
 # panel: outlets, operators, brands, business types, volumes and prices.
 #
@@ -6,21 +38,9 @@
 # Output: 28 LaTeX tables in <DIR_OUTPUT>/Tablas and 15 PNG figures in
 #         <DIR_OUTPUT>/Gráficos
 
-library(data.table)
-library(fs)
-library(knitr)
-library(ggplot2)
-
-source("code/00_config.R")
-
 options(scipen = 999)
 
 # Paths ----
-
-DIR_OUT_NEW <- DIR_OUTPUT
-DIR_TABLES  <- fs::path(DIR_OUT_NEW, "Tablas")
-DIR_FIGURES <- fs::path(DIR_OUT_NEW, "Gráficos")
-DIR_INPUT   <- DIR_INTERIM
 
 FILE_BASE <- fs::path(DIR_INPUT, "eess_all_cleaned7_alternative_sinceappearance.rds")
 
@@ -1882,3 +1902,871 @@ cat("- g12_evolucion_anual_banderas_estaciones.png\n")
 cat("- g13_share_anual_banderas_estaciones.png\n")
 cat("- g14_top10_banderas_ultimo_anio_estaciones.png\n")
 cat("- g15_top10_banderas_ultimo_anio_volumen.png\n")
+
+# Part 2. Price gap: YPF against the private brands ----
+
+# Robustness checks (figures R1-R4) of figure 1, the price gap between YPF (the
+# state-controlled firm) and rival brands.
+#
+# Input:  eess_all_cleaned7_alternative_sinceappearance.rds
+#         (boca (outlet) x product x channel x month)
+# Output: figR1_benchmark_shell.png, figR2_ladder_blancas.png,
+#         figR3_gap_condicional_IC.png, figR4_distribucion_gap.png (Gráficos/)
+
+BASE   <- file.path(DIR_INTERIM, "eess_all_cleaned7_alternative_sinceappearance.rds")
+# Figures are written to a local scratch folder and then copied to the synced
+# output folder, because the sync client locks files while they are being written.
+OUT    <- file.path(tempdir(), "figures")
+dir.create(OUT, showWarnings = FALSE, recursive = TRUE)
+DROP   <- file.path(DIR_OUTPUT, "Gráficos")
+
+# Brand groups and regimes ----
+# PRIV are the large private brands; BLANCA are the blancas (unbranded,
+# independent stations). Focal products: regular gasoline and grade 2 diesel.
+PRIV   <- c("SHELL C.A.P.S.A.","ESSO PETROLERA ARGENTINA S.R.L","AXION","PETROBRAS","Pampa Energia","PUMA","OIL COMBUSTIBLES S.A.")
+BLANCA <- c("BLANCA","SIN EMPRESA BANDERA")
+PRODS  <- c("Nafta (súper) entre 92 y 95 Ron","Gas Oil Grado 2")
+# Regime breaks: YPF nationalized (May 2012), price deregulation (November 2017),
+# price freeze (August 2019).
+REGS   <- data.frame(x=as.Date(c("2012-05-01","2017-11-01","2019-08-01")),
+                     lab=c("2012 · YPF estatal","2017 · desregulación","2019 · congelamiento"))
+
+regime_of <- function(d) factor(
+  fifelse(d <  as.Date("2012-05-01"), "YPF privada",
+   fifelse(d <  as.Date("2017-11-01"), "Estatal·regulado",
+    fifelse(d <  as.Date("2019-08-01"), "Estatal·desreg.", "Estatal·congel."))),
+  levels=c("YPF privada","Estatal·regulado","Estatal·desreg.","Estatal·congel."))
+
+# Sample ----
+# Retail channel, focal products, positive pre-tax price.
+b <- readRDS(BASE); setDT(b)
+b <- b[canal_de_comercializacion=="Al público"]
+b[, precio := suppressWarnings(as.numeric(as.character(precio_sin_impuestos)))]
+b <- b[!is.na(precio) & precio>0 & producto %in% PRODS]
+b[, es_shell := bandera=="SHELL C.A.P.S.A."]
+b[, grupo := fifelse(bandera=="YPF","YPF",
+              fifelse(bandera %in% PRIV,"Priv",
+               fifelse(bandera %in% BLANCA,"Blanca","Otras")))]
+
+# Mean price of each group by cell (locality x month x product)
+cm <- b[, .(
+  p_ypf   = mean(precio[grupo=="YPF"]),
+  p_priv  = mean(precio[grupo=="Priv"]),
+  p_shell = mean(precio[es_shell]),
+  p_blan  = mean(precio[grupo=="Blanca"])
+), by=.(producto, provincia, localidad, periodo_dt)]
+cm[, regime := regime_of(periodo_dt)]
+
+# Gaps by cell. Gaps above 40% in absolute value are gross errors and are set
+# to missing.
+cm[, g_priv  := p_ypf/p_priv  - 1]
+cm[, g_shell := p_ypf/p_shell - 1]
+cm[, g_blan  := p_blan/p_priv - 1]
+for (v in c("g_priv","g_shell","g_blan")) cm[abs(get(v))>0.4, (v):=NA_real_]
+
+# R1. Constant benchmark: Shell alone instead of the large private brands ----
+r1 <- rbind(
+  cm[!is.na(g_priv),  .(gap=median(g_priv)),  by=.(producto,periodo_dt)][, bench:="vs Privadas grandes"],
+  cm[!is.na(g_shell), .(gap=median(g_shell)), by=.(producto,periodo_dt)][, bench:="vs Shell (constante)"])
+gR1 <- ggplot(r1, aes(periodo_dt, gap, color=bench)) +
+  geom_hline(yintercept=0, color="grey55", linewidth=.3) +
+  geom_vline(data=REGS, aes(xintercept=x), linetype="dashed", color="grey45", linewidth=.3) +
+  geom_line(linewidth=.6) + facet_wrap(~producto, ncol=1) +
+  scale_y_continuous(labels=percent_format(accuracy=1)) + scale_x_date(date_breaks="3 years", date_labels="%Y") +
+  scale_color_manual(values=c("vs Privadas grandes"="#1F3864","vs Shell (constante)"="#C55A11")) +
+  coord_cartesian(ylim=c(-0.13,0.06)) +
+  labs(title="R1 · El gap de YPF es robusto al benchmark",
+       subtitle="Mediana entre localidades del gap de precio de YPF. <0 = YPF más barata.",
+       x=NULL, y="Gap YPF (%)", color=NULL) +
+  theme_minimal(base_size=11) + theme(legend.position="bottom", plot.title=element_text(face="bold"))
+
+# R2. Price ladder: YPF and blancas against the large private brands ----
+r2 <- rbind(
+  cm[!is.na(g_priv), .(gap=median(g_priv)), by=.(producto,periodo_dt)][, grp:="YPF"],
+  cm[!is.na(g_blan), .(gap=median(g_blan)), by=.(producto,periodo_dt)][, grp:="Blancas (independientes)"])
+gR2 <- ggplot(r2, aes(periodo_dt, gap, color=grp)) +
+  geom_hline(yintercept=0, color="grey55", linewidth=.3) +
+  geom_vline(data=REGS, aes(xintercept=x), linetype="dashed", color="grey45", linewidth=.3) +
+  geom_line(linewidth=.6) + facet_wrap(~producto, ncol=1) +
+  scale_y_continuous(labels=percent_format(accuracy=1)) + scale_x_date(date_breaks="3 years", date_labels="%Y") +
+  scale_color_manual(values=c("YPF"="#1F3864","Blancas (independientes)"="#2E7D32")) +
+  coord_cartesian(ylim=c(-0.13,0.06)) +
+  labs(title="R2 · ¿Quién es más barato? YPF vs. Blancas (ref.: Privadas grandes)",
+       subtitle="Mediana entre localidades del gap de precio vs. las privadas grandes. <0 = más barato que las privadas.",
+       x=NULL, y="Gap vs. Privadas grandes (%)", color=NULL) +
+  theme_minimal(base_size=11) + theme(legend.position="bottom", plot.title=element_text(face="bold"))
+
+# R3. Gap within locality, by regime, with 95% CI clustered by locality ----
+# The gap is first averaged within locality, so the standard error of the mean
+# across localities treats each locality as one cluster.
+r3build <- function(col, lab){
+  loc <- cm[!is.na(get(col)), .(g=mean(get(col))), by=.(producto,regime,localidad)]
+  loc[, .(est=mean(g), se=sd(g)/sqrt(.N), nloc=.N), by=.(producto,regime)][, grp:=lab]
+}
+r3 <- rbind(r3build("g_priv","YPF vs Privadas"), r3build("g_blan","Blancas vs Privadas"))
+r3[, `:=`(lo=est-1.96*se, hi=est+1.96*se)]
+gR3 <- ggplot(r3, aes(regime, est, color=grp)) +
+  geom_hline(yintercept=0, color="grey55", linewidth=.3) +
+  geom_pointrange(aes(ymin=lo, ymax=hi), position=position_dodge(width=.4), size=.5) +
+  facet_wrap(~producto, ncol=1) +
+  scale_y_continuous(labels=percent_format(accuracy=.1)) +
+  scale_color_manual(values=c("YPF vs Privadas"="#1F3864","Blancas vs Privadas"="#2E7D32")) +
+  labs(title="R3 · Gap condicional dentro de localidad (IC 95% clusterizado x localidad)",
+       subtitle="Diferencia media de precio vs. privadas grandes, dentro de la misma localidad-mes, por régimen.",
+       x=NULL, y="Gap medio (%)", color=NULL) +
+  theme_minimal(base_size=11) + theme(legend.position="bottom", plot.title=element_text(face="bold"),
+                                       axis.text.x=element_text(angle=20, hjust=1))
+
+# R4. Distribution of the gap across localities (p25, median, p75) ----
+r4 <- cm[!is.na(g_priv), .(p25=quantile(g_priv,.25), p50=median(g_priv), p75=quantile(g_priv,.75)),
+         by=.(producto,periodo_dt)]
+gR4 <- ggplot(r4, aes(periodo_dt)) +
+  geom_hline(yintercept=0, color="grey55", linewidth=.3) +
+  geom_vline(data=REGS, aes(xintercept=x), linetype="dashed", color="grey45", linewidth=.3) +
+  geom_ribbon(aes(ymin=p25, ymax=p75), fill="#1F3864", alpha=.18) +
+  geom_line(aes(y=p50), color="#1F3864", linewidth=.6) +
+  facet_wrap(~producto, ncol=1) +
+  scale_y_continuous(labels=percent_format(accuracy=1)) + scale_x_date(date_breaks="3 years", date_labels="%Y") +
+  coord_cartesian(ylim=c(-0.15,0.08)) +
+  labs(title="R4 · ¿Es todo el mercado o unas pocas localidades?",
+       subtitle="Gap YPF vs. privadas grandes: mediana (línea) y rango intercuartil p25–p75 (banda) entre localidades.",
+       x=NULL, y="Gap YPF vs. privadas (%)") +
+  theme_minimal(base_size=11) + theme(plot.title=element_text(face="bold"))
+
+# Save figures ----
+figs <- list(R1_benchmark_shell=gR1, R2_ladder_blancas=gR2, R3_gap_condicional_IC=gR3, R4_distribucion_gap=gR4)
+dims <- list(c(9.5,6), c(9.5,6), c(9,6.2), c(9.5,6))
+for (i in seq_along(figs)) {
+  fn <- paste0("figR", i, "_", names(figs)[i], ".png")
+  ggsave(file.path(OUT, fn), figs[[i]], width=dims[[i]][1], height=dims[[i]][2], dpi=150)
+  ok <- file.copy(file.path(OUT, fn), file.path(DROP, fn), overwrite=TRUE)
+  cat("saved:", fn, "| copied to output folder:", ok, "\n")
+}
+
+# Console diagnostics ----
+cat("\nR1: correlation between the gap vs. large private brands and the gap vs. Shell, by product\n")
+r1w <- dcast(r1, producto+periodo_dt~bench, value.var="gap")
+print(r1w[, .(cor=round(cor(`vs Privadas grandes`,`vs Shell (constante)`, use="complete.obs"),3)), by=producto])
+cat("\nR2/R3: mean gap by regime (%), YPF and blancas vs. large private brands\n")
+print(r3[, .(producto, regime, grp, est=round(est*100,2), IC=paste0("[",round(lo*100,1),",",round(hi*100,1),"]"), nloc)][order(producto,grp,regime)])
+cat("\nR4: % of locality-months where YPF is cheaper (g_priv < 0)\n")
+print(cm[!is.na(g_priv), .(pct_ypf_mas_barata=round(mean(g_priv<0)*100,1), celdas=.N), by=.(producto,regime)][order(producto,regime)])
+cat("\nFigures R1-R4 done.\n")
+
+# Part 3. Volumes, shares and reporting gaps ----
+
+# Quantities, market shares and reporting gaps in the station panel: reporting
+# gaps (Q1), shares in volume vs. outlets (Q2), volume HHI (Q3), outlet size (Q4).
+#
+# Input:  eess_all_cleaned7_alternative_sinceappearance_con_crosswalk.rds
+# Output: tables 29-32 (Tablas/) and figQ1-figQ4 (Gráficos/)
+
+# Paths (same layout as 01_market_structure.R) ----
+FILE_BASE   <- fs::path(DIR_INPUT, "eess_all_cleaned7_alternative_sinceappearance_con_crosswalk.rds")
+
+# Figures are written to a local temporary folder and then copied to the synced
+# output folder, because the sync client locks files while they are being written.
+DIR_TMP <- fs::path(tempdir(), "figs_bloqueQ")
+fs::dir_create(DIR_TMP, recurse = TRUE)
+fs::dir_create(DIR_TABLES, recurse = TRUE)
+fs::dir_create(DIR_FIGURES, recurse = TRUE)
+if (!fs::file_exists(FILE_BASE)) stop("Input file with crosswalk not found: ", FILE_BASE)
+
+# Helpers ----
+# LaTeX table writer as in 01_market_structure.R. fmt_n() uses a period as
+# thousands separator, as in the Spanish tables.
+save_tex_table <- function(df, file_path, caption = NULL, label = NULL, align = NULL) {
+  tex <- knitr::kable(df, format = "latex", booktabs = TRUE, longtable = FALSE,
+                      linesep = "", escape = TRUE, caption = caption,
+                      label = label, align = align)
+  writeLines(tex, con = file_path)
+  cat("  saved:", basename(file_path), "\n")
+}
+fmt_n <- function(x) format(round(x), big.mark = ".", scientific = FALSE, trim = TRUE)
+
+# Brand groups, products and regimes (same as 02_ypf_private_gap.R) ----
+PRIV   <- c("SHELL C.A.P.S.A.", "ESSO PETROLERA ARGENTINA S.R.L", "AXION",
+            "PETROBRAS", "Pampa Energia", "PUMA", "OIL COMBUSTIBLES S.A.")
+BLANCA <- c("BLANCA", "SIN EMPRESA BANDERA")
+PRODS  <- c("Nafta (súper) entre 92 y 95 Ron", "Gas Oil Grado 2")
+REGS   <- data.frame(x = as.Date(c("2012-05-01", "2017-11-01", "2019-08-01")),
+                     lab = c("2012 · YPF estatal", "2017 · desregulación", "2019 · congelamiento"))
+# Pampas core vs. periphery (Pampeana region, as in Culós et al. 2024)
+NUCLEO <- c("BUENOS AIRES", "CAPITAL FEDERAL", "SANTA FE", "CORDOBA", "ENTRE RIOS", "LA PAMPA")
+
+regime_of <- function(d) factor(
+  fifelse(d <  as.Date("2012-05-01"), "YPF privada",
+   fifelse(d <  as.Date("2017-11-01"), "Estatal·regulado",
+    fifelse(d <  as.Date("2019-08-01"), "Estatal·desreg.", "Estatal·congel."))),
+  levels = c("YPF privada", "Estatal·regulado", "Estatal·desreg.", "Estatal·congel."))
+
+# Sample ----
+# Retail channel ("Al público"), the two focal products, positive volume.
+b <- readRDS(FILE_BASE); setDT(b)
+f <- b[canal_de_comercializacion == "Al público" & producto %in% PRODS]
+f[, vol := suppressWarnings(as.numeric(as.character(volumen)))]
+f <- f[!is.na(vol) & vol > 0]
+f[, grupo := fifelse(bandera == "YPF", "YPF",
+              fifelse(bandera %in% PRIV, "Privadas grandes",
+               fifelse(bandera %in% BLANCA, "Blancas", "Otras")))]
+f[, nucleo := fifelse(provincia %in% NUCLEO, "Núcleo pampeano", "Periferia")]
+
+# Taxed and tax-exempt sales: the 0/1 flag `excentos` splits each cell into a
+# taxed and an exempt row. The unit is boca (outlet) x product x month, so
+# volumes are summed.
+pm <- f[, .(vol = sum(vol), n_filas = .N),
+        by = .(nro_inscripcion, producto, periodo_dt, provincia, departamento,
+               localidad, bandera, grupo, nucleo, cuit)]
+pm[, tt := (year(periodo_dt) - 2004L) * 12L + month(periodo_dt)]
+pm[, regime := regime_of(periodo_dt)]
+# Market id: province x department, with departments taken from the crosswalk
+# (code/03_spatial_variables/crosswalk_locality_department.R). Department names
+# repeat across provinces, so counting `departamento` alone undercounts markets.
+pm[, mercado := paste0(provincia, "||", departamento)]
+
+cat("Sample\n")
+cat("focal rows:", fmt_n(nrow(f)), "| outlet x product x month:", fmt_n(nrow(pm)),
+    "(collapsed", nrow(f) - nrow(pm), "taxed/exempt rows)\n")
+cat("outlets:", uniqueN(pm$nro_inscripcion), "| markets (province x department):", uniqueN(pm$mercado),
+    "| distinct department names:", uniqueN(pm$departamento),
+    "| months:", uniqueN(pm$periodo_dt), "\n\n")
+
+# Q1. Reporting gaps in the panel (table 29, figQ1) ----
+# A missing outlet-month is a month inside the active span of the outlet (first
+# to last appearance) with no row. The data hold no zeros, because cleaned3_cut
+# (01_build_panel/02_clean_volume.R) keeps volume >= 1e-3, so "did not report"
+# and "sold nothing" cannot be told apart.
+sp <- pm[, .(tt0 = min(tt), tt1 = max(tt), nobs = .N), by = .(nro_inscripcion, producto)]
+sp[, nmeses := tt1 - tt0 + 1L][, huecos := nmeses - nobs][, pct_hueco := huecos / nmeses]
+
+setorder(pm, nro_inscripcion, producto, tt)
+pm[, gap := tt - shift(tt) - 1L, by = .(nro_inscripcion, producto)]
+gg <- pm[!is.na(gap) & gap > 0]
+
+.pct_falt  <- 100 * sum(sp$huecos) / sum(sp$nmeses)
+.n_flick   <- uniqueN(gg[gap >= 6, .(nro_inscripcion, producto)])
+tab29 <- data.table(
+  Metrica = c("Series (boca x producto)",
+              "Boca-mes observadas",
+              "Boca-mes esperadas (dentro del span activo)",
+              "Boca-mes FALTANTES",
+              "Series con al menos un hueco",
+              "Interrupciones de 1-2 meses",
+              "Interrupciones de 3-5 meses",
+              "Interrupciones de 6+ meses (flickering)",
+              "Series con al menos una interrupcion de 6+ meses"),
+  Valor = c(fmt_n(nrow(sp)), fmt_n(sum(sp$nobs)), fmt_n(sum(sp$nmeses)),
+            fmt_n(sum(sp$huecos)), fmt_n(sum(sp$huecos > 0)),
+            fmt_n(sum(gg$gap <= 2)), fmt_n(sum(gg$gap >= 3 & gg$gap <= 5)),
+            fmt_n(sum(gg$gap >= 6)), fmt_n(.n_flick)),
+  # Plain `%`: kable(escape = TRUE) escapes it, so writing \% here would escape it twice
+  Porcentaje = c("",
+                 sprintf("%.1f%% de las esperadas", 100 * sum(sp$nobs) / sum(sp$nmeses)),
+                 "100%",
+                 sprintf("%.1f%% de las esperadas", .pct_falt),
+                 sprintf("%.1f%% de las series", 100 * mean(sp$huecos > 0)),
+                 "", "", "",
+                 sprintf("%.1f%% de las series", 100 * .n_flick / nrow(sp))))
+
+cat("Q1. Reporting gaps\n"); print(tab29)
+save_tex_table(tab29, fs::path(DIR_TABLES, "29_huecos_reporte_panel.tex"),
+  caption = paste("Huecos de reporte del panel. Un \\emph{faltante} es un mes dentro del",
+                  "span activo de la boca (primera--última aparición) sin fila en la base.",
+                  "Como la limpieza eliminó los volúmenes nulos, no es posible distinguir",
+                  "\\emph{no reportó} de \\emph{vendió cero}.",
+                  "Muestra: nafta súper y gasoil grado 2, canal al público, volumen positivo."),
+  label = "huecos_panel")
+
+# Figure Q1: outlets observed vs. active (inside their span), by month
+act   <- sp[, .(tt = seq.int(tt0, tt1)), by = .(nro_inscripcion, producto)]
+q1    <- merge(act[, .(activas = uniqueN(nro_inscripcion)), by = tt],
+               pm[, .(observadas = uniqueN(nro_inscripcion)), by = tt], by = "tt", all.x = TRUE)
+q1[is.na(observadas), observadas := 0]
+q1[, fecha := as.Date(sprintf("%d-%02d-01", 2004L + (tt - 1L) %/% 12L, (tt - 1L) %% 12L + 1L))]
+q1[, pct_hueco := 1 - observadas / activas]
+cat("\n% of outlet-months missing, by year\n")
+print(q1[, .(activas = round(mean(activas)), observadas = round(mean(observadas)),
+             pct_hueco = round(100 * mean(pct_hueco), 1)), by = .(anio = year(fecha))][order(anio)])
+
+q1l <- melt(q1[, .(fecha, `Activas (dentro de su span)` = activas, `Observadas (reportan)` = observadas)],
+            id.vars = "fecha", variable.name = "serie", value.name = "bocas")
+gQ1 <- ggplot(q1l, aes(fecha, bocas, color = serie)) +
+  geom_vline(data = REGS, aes(xintercept = x), linetype = "dashed", color = "grey45", linewidth = .3) +
+  geom_line(linewidth = .6) +
+  scale_color_manual(values = c("Activas (dentro de su span)" = "#C55A11", "Observadas (reportan)" = "#1F3864")) +
+  scale_x_date(date_breaks = "3 years", date_labels = "%Y") +
+  labs(title = "Q1 · El panel no es balanceado: huecos de reporte",
+       subtitle = "Bocas dentro de su span activo (primera–última aparición) vs. bocas que efectivamente reportan.\nLa brecha son boca-mes faltantes. Muestra: nafta súper + gasoil G2, canal al público.",
+       x = NULL, y = "Bocas", color = NULL) +
+  theme_minimal(base_size = 11) + theme(legend.position = "bottom", plot.title = element_text(face = "bold"))
+ggsave(fs::path(DIR_TMP, "figQ1_huecos_panel.png"), gQ1, width = 9, height = 4.6, dpi = 200)
+
+# Volume cap for the quantity analyses (Q2-Q4) ----
+# A retail outlet does not sell more than about 3,000 m3 a month (100,000 litres
+# a day). Larger values are wholesale or depot deliveries misclassified into the
+# "Al público" channel: they recur at fixed locations (Perdriel, Mendoza, next to
+# the Luján de Cuyo refinery; the city of Buenos Aires; Posadas) and reach about
+# 850,000 m3 a month for a single outlet. The median outlet-month is stable
+# (36-91 m3) and there is no change of units, so the problem is only the tail.
+# With the cap, national annual volume of the two focal products is 10-17.5
+# million m3, in line with actual consumption; without it, 222 million.
+#
+# The cap is not applied to `pm`: Q1 measures reporting (whether the row exists),
+# not magnitudes, and dropping outlet-months by volume would inflate the gaps.
+VOL_CAP <- 3000
+pmv <- pm[vol <= VOL_CAP]
+cat(sprintf("\nVolume cap (Q2-Q4)\ndropped %s of %s outlet-months (%.2f%%) | total volume from %s to %s thousand m3\n",
+            fmt_n(nrow(pm) - nrow(pmv)), fmt_n(nrow(pm)),
+            100 * (nrow(pm) - nrow(pmv)) / nrow(pm),
+            fmt_n(round(sum(pm$vol) / 1e3)), fmt_n(round(sum(pmv$vol) / 1e3))))
+
+# Q2. Market shares: volume vs. number of outlets (table 30, figQ2) ----
+nat_vol <- pmv[, .(vol = sum(vol)), by = .(periodo_dt, producto, grupo)]
+nat_vol[, share := vol / sum(vol), by = .(periodo_dt, producto)]
+nat_boc <- pmv[, .(n = uniqueN(nro_inscripcion)), by = .(periodo_dt, producto, grupo)]
+nat_boc[, share := n / sum(n), by = .(periodo_dt, producto)]
+
+cmp <- merge(
+  nat_vol[, .(sv = 100 * mean(share)), by = .(regime = regime_of(periodo_dt), producto, grupo)],
+  nat_boc[, .(sb = 100 * mean(share)), by = .(regime = regime_of(periodo_dt), producto, grupo)],
+  by = c("regime", "producto", "grupo"))
+cmp <- cmp[grupo != "Otras"]
+setorder(cmp, producto, grupo, regime)
+tab30 <- cmp[, .(Producto = producto, Regimen = as.character(regime), Grupo = grupo,
+                 `Share en bocas (%)` = round(sb, 1),
+                 `Share en volumen (%)` = round(sv, 1),
+                 `Ratio vol/bocas` = round(sv / sb, 2))]
+cat("\nQ2. Shares: volume vs. outlets\n"); print(tab30)
+save_tex_table(tab30, fs::path(DIR_TABLES, "30_shares_volumen_vs_bocas.tex"),
+  caption = paste("Participación nacional por grupo de bandera, medida en número de bocas y en",
+                  "volumen vendido, por régimen. Un ratio mayor a 1 indica que las bocas del grupo",
+                  "son más grandes que el promedio. Promedio de los shares mensuales dentro de cada",
+                  "régimen. Muestra: nafta súper y gasoil grado 2, canal al público."),
+  label = "shares_vol_bocas")
+
+ypf <- rbind(nat_vol[grupo == "YPF", .(periodo_dt, producto, share, medida = "Share en VOLUMEN")],
+             nat_boc[grupo == "YPF", .(periodo_dt, producto, share, medida = "Share en BOCAS")])
+gQ2 <- ggplot(ypf, aes(periodo_dt, share, color = medida)) +
+  geom_vline(data = REGS, aes(xintercept = x), linetype = "dashed", color = "grey45", linewidth = .3) +
+  geom_line(linewidth = .6) + facet_wrap(~producto, ncol = 1) +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) +
+  scale_x_date(date_breaks = "3 years", date_labels = "%Y") +
+  scale_color_manual(values = c("Share en VOLUMEN" = "#1F3864", "Share en BOCAS" = "#7F7F7F")) +
+  labs(title = "Q2 · YPF vende más de lo que su red sugiere",
+       subtitle = "Participación nacional de YPF. El share en volumen supera al share en bocas ⇒ sus estaciones son más grandes.",
+       x = NULL, y = "Share de YPF", color = NULL) +
+  theme_minimal(base_size = 11) + theme(legend.position = "bottom", plot.title = element_text(face = "bold"))
+ggsave(fs::path(DIR_TMP, "figQ2_share_ypf_volumen_vs_bocas.png"), gQ2, width = 9, height = 6, dpi = 200)
+
+# Q3. Volume HHI by market (table 31, figQ3) ----
+# Firm definition: branded stations compete as one brand, while blancas
+# (unbranded) are independent, one firm per CUIT (tax id) or per outlet when the
+# CUIT is missing. Same convention as the market-definition diagnostics in
+# crosswalk_locality_department.R.
+pmv[, firma := fifelse(grupo == "Blancas",
+                      paste0("BLANCA::", fifelse(is.na(cuit) | trimws(cuit) == "",
+                                                 as.character(nro_inscripcion), as.character(cuit))),
+                      as.character(bandera))]
+hh <- pmv[, .(vol = sum(vol)), by = .(provincia, departamento, nucleo, producto, periodo_dt, firma)]
+hh[, s := vol / sum(vol), by = .(provincia, departamento, producto, periodo_dt)]
+hhi <- hh[, .(hhi = 10000 * sum(s^2), nfirmas = .N),
+          by = .(provincia, departamento, nucleo, producto, periodo_dt)]
+hhi[, regime := regime_of(periodo_dt)]
+
+tab31 <- hhi[, .(`HHI mediano` = as.numeric(round(median(hhi))),
+                 `Firmas equivalentes` = round(10000 / median(hhi), 2),
+                 `Firmas por mercado (mediana)` = as.numeric(median(nfirmas)),
+                 `Mercados monopolicos (%)` = round(100 * mean(nfirmas == 1), 1),
+                 `Mercados` = uniqueN(paste0(provincia, "||", departamento))),
+             by = .(Region = nucleo, Producto = producto)][order(Producto, Region)]
+cat("\nQ3. Volume HHI\n"); print(tab31)
+save_tex_table(tab31, fs::path(DIR_TABLES, "31_hhi_volumen_nucleo_periferia.tex"),
+  caption = paste("Concentración en volumen por mercado (provincia $\\times$ departamento $\\times$ mes).",
+                  "HHI $=$ suma de los cuadrados de los \\emph{shares} de volumen, $\\times 10.000$.",
+                  "Las \\emph{firmas equivalentes} ($10.000/HHI$) indican a cuántas firmas de igual",
+                  "tamaño equivale la concentración observada. Firma $=$ bandera; las blancas se",
+                  "cuentan como firmas independientes (por CUIT). Mediana entre mercados y meses."),
+  label = "hhi_volumen")
+
+cat("\nMedian HHI by regime\n")
+print(dcast(hhi[, .(hhi = as.numeric(round(median(hhi)))), by = .(regime, nucleo, producto)],
+            producto + nucleo ~ regime, value.var = "hhi"))
+
+hhi_m <- hhi[, .(hhi = median(hhi)), by = .(nucleo, producto, periodo_dt)]
+gQ3 <- ggplot(hhi_m, aes(periodo_dt, hhi, color = nucleo)) +
+  geom_hline(yintercept = 2500, linetype = "dotted", color = "grey40") +
+  geom_vline(data = REGS, aes(xintercept = x), linetype = "dashed", color = "grey45", linewidth = .3) +
+  geom_line(linewidth = .6) + facet_wrap(~producto, ncol = 1) +
+  scale_x_date(date_breaks = "3 years", date_labels = "%Y") +
+  scale_color_manual(values = c("Núcleo pampeano" = "#1F3864", "Periferia" = "#C55A11")) +
+  labs(title = "Q3 · Concentración en volumen: dos mercados distintos",
+       subtitle = "HHI mediano entre mercados (provincia × departamento × mes), con shares de VOLUMEN por firma.\nLínea punteada = 2.500 (umbral de alta concentración).",
+       x = NULL, y = "HHI mediano", color = NULL) +
+  theme_minimal(base_size = 11) + theme(legend.position = "bottom", plot.title = element_text(face = "bold"))
+ggsave(fs::path(DIR_TMP, "figQ3_hhi_volumen_nucleo_periferia.png"), gQ3, width = 9, height = 6, dpi = 200)
+
+# Q4. Outlet size: monthly volume per outlet (table 32, figQ4) ----
+tab32 <- pmv[grupo != "Otras",
+            .(`Boca-mes` = .N, `p25` = round(quantile(vol, .25)), `Mediana` = round(median(vol)),
+              `p75` = round(quantile(vol, .75)), `p95` = round(quantile(vol, .95))),
+            by = .(Producto = producto, Grupo = grupo)][order(Producto, -Mediana)]
+cat("\nQ4. Volume per outlet-month (m3)\n"); print(tab32)
+save_tex_table(tab32, fs::path(DIR_TABLES, "32_volumen_mediano_por_boca.tex"),
+  caption = paste("Tamaño de la boca: distribución del volumen mensual por estación (m$^3$),",
+                  "por grupo de bandera. Muestra: nafta súper y gasoil grado 2, canal al público,",
+                  "volumen positivo. Insumo para el tamaño de mercado del modelo de demanda."),
+  label = "tamano_boca")
+
+gQ4 <- ggplot(pmv[grupo != "Otras"], aes(x = vol, fill = grupo)) +
+  geom_density(alpha = .35, color = NA) +
+  scale_x_log10(labels = comma_format(accuracy = 1)) +
+  facet_wrap(~producto, ncol = 1, scales = "free_y") +
+  scale_fill_manual(values = c("YPF" = "#1F3864", "Privadas grandes" = "#C55A11", "Blancas" = "#2E7D32")) +
+  labs(title = "Q4 · Tamaño de la boca: las estaciones de YPF venden más",
+       subtitle = "Densidad del volumen mensual por boca (escala log). Insumo para el tamaño de mercado del BLP.",
+       x = "Volumen mensual por boca (m³, escala log)", y = "Densidad", fill = NULL) +
+  theme_minimal(base_size = 11) + theme(legend.position = "bottom", plot.title = element_text(face = "bold"))
+ggsave(fs::path(DIR_TMP, "figQ4_tamano_boca.png"), gQ4, width = 9, height = 6, dpi = 200)
+
+# Copy figures to the output folder ----
+figs <- c("figQ1_huecos_panel.png", "figQ2_share_ypf_volumen_vs_bocas.png",
+          "figQ3_hhi_volumen_nucleo_periferia.png", "figQ4_tamano_boca.png")
+ok <- file.copy(fs::path(DIR_TMP, figs), fs::path(DIR_FIGURES, figs), overwrite = TRUE)
+cat("\nOutput\n")
+cat("tables 29-32 written to", as.character(DIR_TABLES), "\n")
+cat("figures copied:", sum(ok), "/", length(figs), "to", as.character(DIR_FIGURES), "\n")
+
+# Part 4. Station characteristics ----
+
+# Inventory of observable station characteristics, the X of the BLP demand model:
+# variation within and between markets (C1, C2) and highway vs. urban location (C3).
+#
+# Input:  eess_all_cleaned7_alternative_sinceappearance_con_crosswalk.rds
+# Output: tables 33-34 (Tablas/), figC1 and figC2 (Gráficos/)
+
+# Paths (same layout as 01_market_structure.R) ----
+FILE_BASE   <- fs::path(DIR_INPUT, "eess_all_cleaned7_alternative_sinceappearance_con_crosswalk.rds")
+# Figures go to a local temporary folder first and are copied to the synced
+# output folder at the end, because the sync client locks files being written.
+DIR_TMP <- fs::path(tempdir(), "figs_bloqueC"); fs::dir_create(DIR_TMP, recurse = TRUE)
+fs::dir_create(DIR_TABLES, recurse = TRUE); fs::dir_create(DIR_FIGURES, recurse = TRUE)
+if (!fs::file_exists(FILE_BASE)) stop("Input file with crosswalk not found: ", FILE_BASE)
+
+save_tex_table <- function(df, file_path, caption = NULL, label = NULL, align = NULL) {
+  tex <- knitr::kable(df, format = "latex", booktabs = TRUE, longtable = FALSE,
+                      linesep = "", escape = TRUE, caption = caption, label = label, align = align)
+  writeLines(tex, con = file_path); cat("  saved:", basename(file_path), "\n")
+}
+
+# Products, brand groups and text patterns ----
+# Same products, brand groups and core provinces as 02_ypf_private_gap.R and
+# 03_quantities_shares.R.
+PRODS <- c("Nafta (súper) entre 92 y 95 Ron","Gas Oil Grado 2")
+PRIV  <- c("SHELL C.A.P.S.A.","ESSO PETROLERA ARGENTINA S.R.L","AXION","PETROBRAS","Pampa Energia","PUMA","OIL COMBUSTIBLES S.A.")
+BLANCA<- c("BLANCA","SIN EMPRESA BANDERA")
+NUCLEO<- c("BUENOS AIRES","CAPITAL FEDERAL","SANTA FE","CORDOBA","ENTRE RIOS","LA PAMPA")
+# Operator names that mark a company-operated station (as opposed to a dealer)
+CO_PAT   <- "OPESSA|AXION ENERGY|PAN AMERICAN ENERGY|EG3|TRAFIGURA|PAMPA ENERGIA|ESSO PETROLERA"
+# Highway stations are identified from the address text. Only unambiguous tokens
+# are used; ACCESO is left out.
+RUTA_PAT <- "\\bRUTA\\b|\\bRN\\b|\\bRP\\b|\\bKM\\b|\\bAUTOPISTA\\b|\\bAUTOVIA\\b"
+
+# Sample ----
+# Retail channel, focal products, positive volume. A market is province x
+# department x month.
+b <- readRDS(FILE_BASE); setDT(b)
+f <- b[canal_de_comercializacion=="Al público" & producto %in% PRODS]
+f[, vol := suppressWarnings(as.numeric(as.character(volumen)))]
+f[, precio := suppressWarnings(as.numeric(as.character(precio_sin_impuestos)))]
+f <- f[!is.na(vol) & vol>0]
+f[, mercado := paste0(provincia,"||",departamento)]
+f[, dual := grepl("Duales", tipo_negocio_h_since)]
+f[, co   := grepl(CO_PAT, toupper(operador))]
+f[, ruta := grepl(RUTA_PAT, toupper(iconv(as.character(direccion),"","ASCII//TRANSLIT")))]
+f[, grupo := fifelse(bandera=="YPF","YPF", fifelse(bandera %in% PRIV,"Privadas grandes",
+             fifelse(bandera %in% BLANCA,"Blancas","Otras")))]
+f[, region := fifelse(provincia %in% NUCLEO,"Núcleo","Periferia")]
+# One row per boca (outlet) x market x month; nboc counts the outlets in the
+# market-month.
+bm <- f[, .(vol=sum(vol), bandera=bandera[1], grupo=grupo[1], region=region[1],
+            dual=any(dual), co=any(co), ruta=any(ruta)), by=.(nro_inscripcion, mercado, periodo_dt)]
+bm[, mm := paste0(mercado,"||",periodo_dt)][, nboc := uniqueN(nro_inscripcion), by=mm]
+
+# C1. Inventory of characteristics (table 33) ----
+# A characteristic varies in the market when it takes two or more values in a
+# market-month with at least two outlets. Only then is its taste coefficient
+# identified from substitution within the market.
+mk2 <- bm[nboc>=2, .(v_bandera=uniqueN(bandera)>=2, v_dual=uniqueN(dual)>=2,
+                     v_co=uniqueN(co)>=2, v_ruta=uniqueN(ruta)>=2), by=mm]
+pm_ <- function(col) sprintf("%.1f\\%%", 100*mean(mk2[[col]]))
+tab33 <- data.table(
+  `Característica` = c("Bandera (marca)","Ubicación ruta/urbano","Dual GNC (ofrece GNC)",
+                      "Tamaño de boca","Company-op vs dealer","Grado (súper/premium/…)",
+                      "Antigüedad (span)","Amenities (surtidores, shop, 24h)","Impuestos locales"),
+  `Cobertura` = c("100\\%","100\\%","100\\%","100\\%","100\\%","100\\%","100\\%",
+                  "no está","sólo 2024, <8\\%"),
+  `Varía en el mercado` = c(pm_("v_bandera"), pm_("v_ruta"), pm_("v_dual"),
+                           "continua (siempre)", pm_("v_co"), "dentro de la estación",
+                           "casi siempre", "—", "—"),
+  `Rol en el modelo` = c("x (coef. aleatorio)","x","x","x / tamaño de mercado",
+                        "oferta/costo (no demanda)","caract. de producto","proxy de arraigo",
+                        "efecto fijo de estación","inutilizable en panel"))
+cat("C1. Table 33\n"); print(tab33)
+save_tex_table(tab33, fs::path(DIR_TABLES, "33_inventario_caracteristicas.tex"),
+  caption = paste("Inventario de características observables (la ``X'' del modelo de demanda).",
+                  "``Varía en el mercado'' $=$ \\% de mercados (depto $\\times$ mes con $\\geq$2 bocas)",
+                  "donde la característica toma $\\geq$2 valores: sólo entonces su coeficiente de gusto",
+                  "se identifica por sustitución dentro del mercado. Muestra focal."),
+  label = "inventario", align = "llll")
+
+# C2. Within/between decomposition (figC1) ----
+bm[, `:=`(is_ypf=as.numeric(bandera=="YPF"), is_blanca=as.numeric(bandera %in% BLANCA), lvol=log(vol))]
+d <- bm[nboc>=2]
+# Share of the variance of x that is within groups g
+within_share <- function(x,g){ dt<-data.table(x=as.numeric(x),g=g); gm<-dt[,.(m=mean(x),n=.N),by=g]
+  gr<-mean(dt$x); 1 - sum(gm$n*(gm$m-gr)^2)/sum((dt$x-gr)^2) }
+vars <- c(`Marca: es YPF`="is_ypf",`Marca: es blanca`="is_blanca",`Tamaño (log volumen)`="lvol",
+          `Ubicación ruta/urbano`="ruta",`Dual GNC`="dual")
+res <- rbindlist(lapply(names(vars), function(nm)
+  data.table(caracteristica=nm, within=within_share(d[[vars[nm]]], d$mm))))
+res[, between:=1-within]; setorder(res,-within)
+cat("\nC2. Within/between decomposition\n")
+print(res[, .(caracteristica, within=round(100*within,1))])
+resl <- melt(res, id.vars="caracteristica", measure.vars=c("within","between"),
+             variable.name="parte", value.name="frac")
+resl[, parte:=factor(parte, levels=c("between","within"),
+     labels=c("Entre mercados (va al efecto fijo)","Dentro del mercado (identifica gustos)"))]
+resl[, caracteristica:=factor(caracteristica, levels=rev(res$caracteristica))]
+gC1 <- ggplot(resl, aes(frac, caracteristica, fill=parte)) +
+  geom_col(width=.66) + geom_vline(xintercept=.5, color="grey55", linetype="dotted", linewidth=.3) +
+  scale_x_continuous(labels=percent_format(accuracy=1), expand=expansion(0)) +
+  scale_fill_manual(values=c("Dentro del mercado (identifica gustos)"="#2E7D32",
+                             "Entre mercados (va al efecto fijo)"="#BFBFBF")) +
+  labs(title="C2 · Qué característica identifica gustos y cuál se va al efecto fijo",
+       subtitle="Variación de cada característica dentro vs. entre mercados (depto × mes, ≥2 bocas).\nMás verde = más variación DENTRO del mercado → coeficiente de gusto mejor identificado.",
+       x="Fracción de la variación", y=NULL, fill=NULL) +
+  theme_minimal(base_size=11) + theme(legend.position="bottom", plot.title=element_text(face="bold"),
+                                       panel.grid.major.y=element_blank())
+ggsave(fs::path(DIR_TMP,"figC1_within_between.png"), gC1, width=9, height=4.4, dpi=200)
+
+# C3. Highway vs. urban location (figC2, table 34) ----
+boca <- f[, .(ruta=any(ruta), grupo=grupo[1], region=region[1]), by=nro_inscripcion]
+tabR <- boca[grupo!="Otras", .(pct=round(100*mean(ruta),1)), by=.(grupo, region)]
+tab34 <- dcast(tabR, grupo ~ region, value.var="pct")
+setnames(tab34, "grupo", "Grupo")
+setcolorder(tab34, c("Grupo","Núcleo","Periferia"))
+tab34 <- tab34[match(c("YPF","Privadas grandes","Blancas"), Grupo)]
+cat("\nC3. Table 34 (highway location)\n"); print(tab34)
+# Price gap between highway and urban stations, in locality x product x month
+# cells that have both. Gaps of 40% or more in absolute value are dropped.
+fp <- f[!is.na(precio) & precio>0]
+cell <- fp[, .(p_ruta=mean(precio[ruta]), p_urb=mean(precio[!ruta]), n_r=sum(ruta), n_u=sum(!ruta)),
+           by=.(provincia, localidad, producto, periodo_dt, region)][n_r>0 & n_u>0]
+cell[, gap:=p_ruta/p_urb-1]; cell <- cell[abs(gap)<0.4]
+gap_med <- 100*median(cell$gap)
+cat(sprintf("price gap, highway vs. urban: median %+.2f%% (n=%d cells)\n", gap_med, nrow(cell)))
+save_tex_table(tab34, fs::path(DIR_TABLES, "34_ruta_por_grupo_region.tex"),
+  caption = paste("\\% de estaciones cuya dirección es de ruta/autopista (vs. urbana),",
+                  "por grupo de bandera y región. Clasificación por tokens inequívocos de ruta",
+                  "(RUTA/RN/RP/KM/AUTOPISTA) sobre la dirección. Muestra focal."),
+  label = "ruta", align = "lrr")
+
+gC2 <- ggplot(tabR, aes(grupo, pct/100, fill=region)) +
+  geom_col(position=position_dodge(.7), width=.62) +
+  geom_text(aes(label=paste0(pct,"%")), position=position_dodge(.7), vjust=-.35, size=3) +
+  scale_y_continuous(labels=percent_format(accuracy=1), expand=expansion(mult=c(0,.12))) +
+  scale_fill_manual(values=c("Núcleo"="#1F3864","Periferia"="#C55A11")) +
+  labs(title="C3 · Las estaciones de ruta son un fenómeno de la periferia",
+       subtitle="% de estaciones en dirección de ruta/autopista, por grupo y región. En la periferia las lideran las blancas;\nel precio de ruta vs. urbano es prácticamente igual (gap ≈ 0) ⇒ es característica de clientela, no de precio.",
+       x=NULL, y="% de estaciones de ruta", fill=NULL) +
+  theme_minimal(base_size=11) + theme(legend.position="bottom", plot.title=element_text(face="bold"))
+ggsave(fs::path(DIR_TMP,"figC2_ruta_urbano.png"), gC2, width=9, height=4.8, dpi=200)
+
+ok <- file.copy(fs::path(DIR_TMP, c("figC1_within_between.png","figC2_ruta_urbano.png")),
+                fs::path(DIR_FIGURES, c("figC1_within_between.png","figC2_ruta_urbano.png")), overwrite=TRUE)
+cat("\nOutput\ntables 33-34 written to", as.character(DIR_TABLES),
+    "\nfigures figC1/figC2 copied:", sum(ok), "/2 to", as.character(DIR_FIGURES), "\n")
+
+# Part 5. Pump price against crude and import parity ----
+
+# National median pre-tax price of regular gasoline (nafta súper) in USD per litre
+# against Brent, the US Gulf Coast FOB gasoline price and import parity.
+#
+# Input:  eess_all_cleaned7_alternative_sinceappearance_con_crosswalk.rds;
+#         covar_series_nacionales.csv, covar_sesco_comercio_ext.csv and
+#         raw_series/{usgc_gasolina_fob_fred, dolar_blue_mensual_ambito}.csv
+#         in the market covariates folder
+# Output: figK1-figK3 (at the parallel and at the official exchange rate), figK4
+#         and figK1b (Gráficos/); serie_super_vs_costos.csv
+
+# The pump price is the national median across retail outlets ("Al público") of
+# the price without taxes, the supply-side price comparable with costs. It is
+# converted at the parallel exchange rate (blue, monthly average from Ámbito) so
+# that the exchange controls of 2012-15 and 2019-23 do not inflate the dollar
+# price. The same figures at the official A3500 rate, the relevant one for an
+# importer's cost, are saved with the suffix "_tc_oficial".
+#
+# References in USD per litre: Brent / 158.987; FOB / 3.78541, the EIA spot price
+# of conventional regular gasoline, US Gulf Coast (USGC), from FRED (id
+# MGASUSGULF, USD per gallon); import parity / 1000, the unit value (USD per m3)
+# of SESCO imports of Nafta Grado 2 (Súper) and Grado 3 (Ultra), weighted by m3.
+# Parity is observed in 2010-24. Months without imports and 2004-09 are projected
+# from ln(parity) = a + b * ln(FOB), fitted on the observed months.
+
+pdf(NULL)  # keeps ggplotGrob() from leaving an Rplots.pdf in the working directory
+
+# Figures are saved in a local temporary folder and copied to the synced output
+# folder right away, because the sync client locks files while they are written.
+DIR_COV   <- DIR_COVAR
+DIR_FIG   <- fs::path(DIR_OUTPUT, "Gráficos")
+DIR_TMP   <- fs::path(tempdir(), "figs_bloqueK"); fs::dir_create(DIR_TMP)
+FILE_BASE <- fs::path(DIR_INPUT, "eess_all_cleaned7_alternative_sinceappearance_con_crosswalk.rds")
+
+# Regime labels and colors as in 02_ypf_private_gap.R to 04_station_characteristics.R
+PROD_SUPER <- "Nafta (súper) entre 92 y 95 Ron"
+REGS <- data.frame(x=as.Date(c("2012-05-01","2017-10-01","2019-08-01")),
+                   lab=c("2012 · YPF estatal","2017 · desregulación","2019 · congelamiento"))
+regime_of <- function(d) factor(
+  fifelse(d <  as.Date("2012-05-01"), "YPF privada",
+   fifelse(d <  as.Date("2017-11-01"), "Estatal·regulado",
+    fifelse(d <  as.Date("2019-08-01"), "Estatal·desreg.", "Estatal·congel."))),
+  levels=c("YPF privada","Estatal·regulado","Estatal·desreg.","Estatal·congel."))
+L_BBL <- 158.987; L_GAL <- 3.78541
+
+# 5.1 Monthly price of regular gasoline (national median, retail channel) ----
+b <- readRDS(FILE_BASE); setDT(b)
+s <- b[canal_de_comercializacion=="Al público" & producto==PROD_SUPER]
+rm(b); invisible(gc())
+s[, p_sin := suppressWarnings(as.numeric(as.character(precio_sin_impuestos)))]
+s[, p_con := suppressWarnings(as.numeric(as.character(precio_con_impuestos)))]
+s <- s[!is.na(p_sin) & p_sin>0]
+ps <- s[, .(p_sin_ars=median(p_sin), p_con_ars=median(p_con[!is.na(p_con) & p_con>0]), bocas=uniqueN(nro_inscripcion)),
+        by=.(mes=as.Date(periodo_dt))][order(mes)]
+cat("Regular gasoline price:", nrow(ps), "months,", format(min(ps$mes)), "-", format(max(ps$mes)), "\n")
+
+# 5.2 National series and FOB USGC ----
+sn <- fread(fs::path(DIR_COV, "covar_series_nacionales.csv"))
+sn[, mes := as.Date(mes)]
+fob <- fread(fs::path(DIR_COV, "raw_series/usgc_gasolina_fob_fred.csv"))
+setnames(fob, c("mes","fob_usd_gal")); fob[, mes := as.Date(mes)]
+# Parallel exchange rate (blue, selling rate, monthly average; Ámbito, 2004-2024).
+# Before 2011 it coincides with the official rate.
+blue <- fread(fs::path(DIR_COV, "raw_series/dolar_blue_mensual_ambito.csv"))[, .(mes=as.Date(mes), tc_blue=blue_venta_prom)]
+
+# 5.3 Observed import parity (SESCO imports of súper and ultra gasoline) ----
+ce <- fread(fs::path(DIR_COV, "covar_sesco_comercio_ext.csv"))
+par_obs <- ce[tipo=="Importación" & producto %in% c("Nafta Grado 2 (Súper)(m3)","Nafta Grado 3 (Ultra)(m3)") &
+              cantidad>0 & monto_usd>0,
+              .(paridad_usd_m3 = sum(monto_usd)/sum(cantidad), m3_impo=sum(cantidad)),
+              by=.(mes=as.Date(sprintf("%d-%02d-01", anio, mes)))]
+# Unit values outside [200, 2000] USD per m3 are data-entry errors and are dropped
+par_obs <- par_obs[paridad_usd_m3 >= 200 & paridad_usd_m3 <= 2000]
+cat("Observed parity:", nrow(par_obs), "months between", format(min(par_obs$mes)), "and", format(max(par_obs$mes)), "\n")
+
+# 5.4 Monthly panel ----
+d <- merge(ps, sn[, .(mes, tc=tc_a3500_prom, brent_usd_bbl, ipc_2004_100)], by="mes", all.x=TRUE)
+d <- merge(d, fob, by="mes", all.x=TRUE)
+d <- merge(d, par_obs, by="mes", all.x=TRUE)
+d <- merge(d, blue, by="mes", all.x=TRUE)
+stopifnot(!anyNA(d$tc), !anyNA(d$tc_blue), !anyNA(d$brent_usd_bbl), !anyNA(d$fob_usd_gal))
+d[, `:=`(super_usd_of = p_sin_ars/tc,      super_con_usd_of = p_con_ars/tc,        # official A3500 rate
+         super_usd_bl = p_sin_ars/tc_blue, super_con_usd_bl = p_con_ars/tc_blue,   # parallel rate
+         brent_usd_l = brent_usd_bbl/L_BBL, fob_usd_l = fob_usd_gal/L_GAL,
+         paridad_obs_usd_l = paridad_usd_m3/1000)]
+d[, super_usd_l := super_usd_bl]   # main conversion is the parallel rate; the figure loop switches it
+
+# Projected parity: ln(parity) on ln(FOB), fitted on the observed months. The
+# fit on Brent is only printed for comparison.
+fit_fob   <- lm(log(paridad_obs_usd_l) ~ log(fob_usd_l),   data=d[!is.na(paridad_obs_usd_l)])
+fit_brent <- lm(log(paridad_obs_usd_l) ~ log(brent_usd_l), data=d[!is.na(paridad_obs_usd_l)])
+cat("\nParity fit (observed months, n =", sum(!is.na(d$paridad_obs_usd_l)), ")\n")
+cat("  on FOB USGC : b =", round(coef(fit_fob)[2],3),   " R2 =", round(summary(fit_fob)$r.squared,3), "\n")
+cat("  on Brent    : b =", round(coef(fit_brent)[2],3), " R2 =", round(summary(fit_brent)$r.squared,3), "\n")
+d[, paridad_pred_usd_l := exp(predict(fit_fob, newdata=d))]
+d[, paridad_usd_l := fifelse(is.na(paridad_obs_usd_l), paridad_pred_usd_l, paridad_obs_usd_l)]
+d[, paridad_fuente := fifelse(is.na(paridad_obs_usd_l), "proyectada", "observada")]
+d[, regime := regime_of(mes)]
+
+# 5.5 Figures K1-K3 ----
+COL_SUPER <- "#1F3864"; COL_REF <- "#C55A11"
+LAB_SUPER <- "Súper sin impuestos (mediana nacional)"
+theme_k <- theme_minimal(base_size=11) + theme(legend.position="bottom", plot.title=element_text(face="bold"),
+                                                strip.text=element_text(face="bold"))
+# Two stacked panels (levels on top, ratio or gap below) with different y axes.
+# The grobs are stacked with gtable, which ggplot2 already depends on, after
+# equalizing their widths, so patchwork is not needed.
+stack2 <- function(top, bottom, heights=c(1.15, 1)) {
+  g1 <- ggplotGrob(top); g2 <- ggplotGrob(bottom)
+  w <- grid::unit.pmax(g1$widths, g2$widths); g1$widths <- w; g2$widths <- w
+  p1 <- g1$layout[g1$layout$name=="panel", "t"]; g1$heights[p1] <- grid::unit(heights[1], "null")
+  p2 <- g2$layout[g2$layout$name=="panel", "t"]; g2$heights[p2] <- grid::unit(heights[2], "null")
+  rbind(g1, g2, size="first")
+}
+save_stack <- function(g, path, width=10, height=7.5, dpi=150) {
+  png(path, width=width, height=height, units="in", res=dpi); grid::grid.draw(g); dev.off()
+}
+xdate <- scale_x_date(date_breaks="2 years", date_labels="%Y")
+vregs <- geom_vline(data=REGS, aes(xintercept=x), linetype="dashed", color="grey45", linewidth=.3)
+
+mk_fig <- function(ref_col, ref_lab, title, subtitle, ratio_lab, ratio_is_gap=TRUE, pts=NULL) {
+  lv <- rbind(d[, .(mes, serie=LAB_SUPER, y=super_usd_l)],
+              d[, .(mes, serie=ref_lab, y=get(ref_col))])
+  rt <- d[, .(mes, y = if (ratio_is_gap) super_usd_l/get(ref_col)-1 else super_usd_l/get(ref_col))]
+  top <- ggplot() + vregs + geom_line(data=lv, aes(mes, y, color=serie), linewidth=.6)
+  if (!is.null(pts)) top <- top + geom_point(data=pts, aes(mes, y), color=COL_REF, size=1.1, alpha=.85)
+  top <- top + xdate +
+    scale_y_continuous(labels=label_number(accuracy=.01)) +
+    scale_color_manual(values=setNames(c(COL_SUPER, COL_REF), c(LAB_SUPER, ref_lab))) +
+    labs(title=title, subtitle=subtitle, x=NULL, y="USD por litro", color=NULL) +
+    theme_k + theme(legend.position="top", axis.text.x=element_blank())
+  bot <- ggplot() + vregs
+  if (ratio_is_gap) bot <- bot + geom_hline(yintercept=0, color="grey55", linewidth=.3)
+  bot <- bot + geom_line(data=rt, aes(mes, y), color="grey20", linewidth=.6) + xdate +
+    labs(x=NULL, y=ratio_lab) + theme_k
+  bot <- bot + (if (ratio_is_gap) scale_y_continuous(labels=percent_format(accuracy=1))
+                else scale_y_continuous(labels=label_number(accuracy=.1)))
+  stack2(top, bot)
+}
+# Each figure is drawn twice, at the parallel and at the official exchange rate
+CONV <- list(paralelo = list(col="super_usd_bl", suf="",            tc_lab="dólar paralelo (blue)"),
+             oficial  = list(col="super_usd_of", suf="_tc_oficial", tc_lab="TC oficial A3500"))
+for (cv in names(CONV)) {
+  d[, super_usd_l := get(CONV[[cv]]$col)]
+  SUB <- paste0("Precio sin impuestos de la nafta súper, mediana entre bocas al público, en USD/litro (", CONV[[cv]]$tc_lab, ").",
+                "\nLíneas punteadas: 2012 estatización de YPF, 2017 desregulación, 2019 congelamiento.")
+  gK1 <- mk_fig("brent_usd_l", "Brent (USD por litro de crudo)",
+                "K1 · Nafta súper vs. Brent",
+                paste0(SUB, " Abajo: cociente súper / Brent, por litro."),
+                "Súper / Brent (veces)", ratio_is_gap=FALSE)
+  gK2 <- mk_fig("fob_usd_l", "FOB nafta regular, Golfo de EE.UU. (EIA)",
+                "K2 · Nafta súper vs. FOB internacional de nafta",
+                paste0(SUB, " Abajo: brecha del precio local sobre el FOB."),
+                "Brecha súper sobre FOB (%)", ratio_is_gap=TRUE)
+  gK3 <- mk_fig("paridad_usd_l", "Paridad de importación (puntos = observada; línea = observada + proyectada)",
+                "K3 · Nafta súper vs. paridad de importación",
+                paste0(SUB, "\nParidad = valor unitario de la importación de nafta súper/ultra (SESCO, 2010-24); meses sin importación y 2004-09\nproyectados con el FOB USGC. Abajo: brecha del precio local sobre la paridad."),
+                "Brecha súper sobre paridad (%)", ratio_is_gap=TRUE,
+                pts=d[paridad_fuente=="observada", .(mes, y=paridad_obs_usd_l)])
+  figs <- list(figK1_super_vs_brent=gK1, figK2_super_vs_fob=gK2, figK3_super_vs_paridad=gK3)
+  for (nm in names(figs)) {
+    fn <- paste0(nm, CONV[[cv]]$suf, ".png")
+    save_stack(figs[[nm]], fs::path(DIR_TMP, fn))
+    ok <- file.copy(fs::path(DIR_TMP, fn), fs::path(DIR_FIG, fn), overwrite=TRUE)
+    cat("saved:", fn, "| copied to output folder:", ok, "\n")
+  }
+}
+d[, super_usd_l := super_usd_bl]
+
+# 5b. K4: the gap over import parity alone, with the policy episodes shaded ----
+# Episodes follow the policy toward crude oil and pump prices, not the sign of
+# the gap: sliding-scale export duties (Res. 532/2004); barril criollo (regulated
+# domestic crude price) as a ceiling (Res. 394/2007, cutoff 42; Res. 1/2013,
+# cutoff 70); support price, the barril criollo as a floor (December 2014 to 22
+# September 2017); free prices (October 2017 to July 2019); price freezes,
+# exchange controls and a de facto barril criollo (DNU 566/2019, Decree 488/2020,
+# Precios Justos); liberalization (December 2023).
+EPIS <- data.table(
+  ini = as.Date(c("2004-12-01","2007-11-01","2015-01-01","2017-10-01","2019-08-01","2023-12-01")),
+  fin = as.Date(c("2007-10-31","2014-12-31","2017-09-30","2019-07-31","2023-11-30","2024-12-31")),
+  lab = c("2005-07\nRetenciones\nescala móvil",
+          "nov-2007 a 2014\nBarril criollo, fase techo\ncrudo interno limitado (42, luego 70)",
+          "2015 a sep-2017\nPrecio sostén\ncrudo interno a 77-55",
+          "oct-2017 a\njul-2019\nPrecios libres",
+          "ago-2019 a nov-2023\nCongelamientos, cepo,\nbarril criollo de hecho",
+          "2024\nLiberación"),
+  signo = c("neg","neg","pos","cero","neg","cero"))
+EPIS[, x := ini + (fin - ini)/2]
+gap <- d[, .(mes, brecha = super_usd_bl/paridad_usd_l - 1)]
+ytop <- 1.5
+gK4 <- ggplot() +
+  geom_rect(data=EPIS, aes(xmin=ini, xmax=fin, ymin=-Inf, ymax=Inf, fill=signo), alpha=.18, show.legend=FALSE) +
+  scale_fill_manual(values=c(neg=COL_SUPER, pos=COL_REF, cero="grey60")) +
+  geom_hline(yintercept=0, color="grey40", linewidth=.35) +
+  geom_line(data=gap, aes(mes, brecha), color="grey15", linewidth=.65) +
+  geom_text(data=EPIS, aes(x=x, y=ytop, label=lab), size=2.8, lineheight=.95, vjust=1, color="grey20") +
+  scale_y_continuous(labels=percent_format(accuracy=1), breaks=seq(-.5, 1.25, .25)) +
+  coord_cartesian(ylim=c(-.65, ytop)) + xdate +
+  labs(title="K4 · La brecha del precio local sobre la paridad de importación, 2004-2024",
+       subtitle="Nafta súper sin impuestos (mediana nacional, dólar paralelo) / paridad de importación − 1.\nTramos según la política sobre el crudo y el surtidor.\nSombreado azul: precio por debajo de la paridad; naranja: por encima; gris: sin intervención.",
+       x=NULL, y="Brecha súper sobre paridad") +
+  theme_k
+ggsave(fs::path(DIR_TMP, "figK4_brecha_episodios.png"), gK4, width=10, height=5.6, dpi=150)
+ok <- file.copy(fs::path(DIR_TMP, "figK4_brecha_episodios.png"), fs::path(DIR_FIG, "figK4_brecha_episodios.png"), overwrite=TRUE)
+cat("saved: figK4_brecha_episodios.png | copied to output folder:", ok, "\n")
+cat("\nGap over parity by episode (median, min, max; parallel rate)\n")
+gap[, epi := EPIS$lab[findInterval(mes, EPIS$ini)]]
+print(gap[, .(meses=.N, mediana=percent(median(brecha),1), min=percent(min(brecha),1), max=percent(max(brecha),1)), by=.(epi=substr(gsub("\n"," · ",epi),1,40))])
+
+# 5c. K1b: regular gasoline vs. Brent in current pesos (log scale) ----
+# Pump price in current pesos against Brent converted to pesos per litre at the
+# official and at the parallel rate. On a log scale, parallel lines grow at the
+# same rate; the two Brent lines coincide outside the exchange-control periods.
+# Bottom panel: ratio of the pump price to Brent in pesos, which equals the ratio
+# in USD because the exchange rate cancels out, with reference lines at 1.3
+# (market value: crude plus refining and freight) and at 1.
+d[, `:=`(brent_ars_of = brent_usd_l * tc, brent_ars_bl = brent_usd_l * tc_blue)]
+lv <- rbind(d[, .(mes, serie = "Súper sin impuestos (mediana nacional)", y = p_sin_ars)],
+            d[, .(mes, serie = "Brent en pesos, TC oficial", y = brent_ars_of)],
+            d[, .(mes, serie = "Brent en pesos, dólar paralelo", y = brent_ars_bl)])
+lv[, serie := factor(serie, levels = c("Súper sin impuestos (mediana nacional)", "Brent en pesos, TC oficial", "Brent en pesos, dólar paralelo"))]
+rt <- rbind(d[, .(mes, serie = "TC oficial", y = p_sin_ars / brent_ars_of)],
+            d[, .(mes, serie = "dólar paralelo", y = p_sin_ars / brent_ars_bl)])
+top <- ggplot() + vregs +
+  geom_line(data = lv, aes(mes, y, color = serie, linetype = serie), linewidth = .6) +
+  scale_y_log10(breaks = c(1, 2, 5, 10, 20, 50, 100, 200, 500), labels = label_number(accuracy = 1)) +
+  scale_color_manual(values = c(COL_SUPER, COL_REF, COL_REF)) +
+  scale_linetype_manual(values = c("solid", "solid", "22")) + xdate +
+  labs(title = "K1b · Nafta súper vs. Brent, en pesos corrientes por litro (escala log)",
+       subtitle = paste0("Súper sin impuestos, mediana entre bocas al público, en pesos corrientes. Brent pasado a pesos por litro con el TC oficial (llena)",
+                         "\ny con el dólar paralelo (punteada). En escala log, líneas paralelas suben al mismo ritmo.",
+                         "\nVerticales: 2012 estatización de YPF, 2017 desregulación, 2019 congelamiento. Abajo: cociente súper / Brent, igual en pesos",
+                         "\nque en dólares. 1,3 = valor de mercado (crudo más refinación y flete); 1 = la nafta vale lo mismo que el crudo."),
+       x = NULL, y = "Pesos por litro (log)", color = NULL, linetype = NULL) +
+  theme_k + theme(legend.position = "top", axis.text.x = element_blank())
+bot <- ggplot() + vregs +
+  geom_hline(yintercept = 1.3, color = "grey30", linewidth = .35, linetype = "dotted") +
+  geom_hline(yintercept = 1, color = "grey55", linewidth = .3) +
+  annotate("text", x = as.Date("2005-01-01"), y = 1.3, label = "1,3 · valor de mercado", hjust = 0, vjust = -0.4, size = 3, color = "grey30") +
+  geom_line(data = rt, aes(mes, y, linetype = serie), color = "grey15", linewidth = .6) +
+  scale_linetype_manual(values = c("TC oficial" = "solid", "dólar paralelo" = "22")) + xdate +
+  scale_y_continuous(labels = label_number(accuracy = .1)) +
+  labs(x = NULL, y = "Súper / Brent (veces)", linetype = "Cociente con") + theme_k +
+  theme(legend.position = "bottom")
+gK1b <- stack2(top, bot)
+save_stack(gK1b, fs::path(DIR_TMP, "figK1b_super_vs_brent_pesos.png"), height = 8)
+ok <- file.copy(fs::path(DIR_TMP, "figK1b_super_vs_brent_pesos.png"), fs::path(DIR_FIG, "figK1b_super_vs_brent_pesos.png"), overwrite = TRUE)
+cat("saved: figK1b_super_vs_brent_pesos.png | copied to output folder:", ok, "\n")
+cat("\nK1b: annual change (%) of the pump price and of Brent, both in pesos, by year\n")
+yr <- d[, .(super = last(p_sin_ars), brent_of = last(brent_ars_of), brent_bl = last(brent_ars_bl)), by = .(anio = year(mes))]
+yr[, `:=`(d_super = round(100 * (super / shift(super) - 1)), d_brent_of = round(100 * (brent_of / shift(brent_of) - 1)), d_brent_bl = round(100 * (brent_bl / shift(brent_bl) - 1)))]
+print(yr[!is.na(d_super), .(anio, d_super, d_brent_of, d_brent_bl)])
+
+# 5.6 Monthly series (CSV, kept for reuse) and diagnostics ----
+out <- d[, .(mes, regime, bocas, tc_a3500=tc, tc_blue, p_super_sin_ars_l=p_sin_ars, p_super_con_ars_l=p_con_ars,
+             super_sin_usd_l_blue=super_usd_bl, super_con_usd_l_blue=super_con_usd_bl,
+             super_sin_usd_l_oficial=super_usd_of, super_con_usd_l_oficial=super_con_usd_of, brent_usd_bbl, brent_usd_l,
+             fob_usgc_usd_gal=fob_usd_gal, fob_usgc_usd_l=fob_usd_l,
+             paridad_obs_usd_m3=paridad_usd_m3, m3_impo, paridad_usd_l, paridad_fuente, ipc_2004_100)]
+fwrite(out, fs::path(DIR_COV, "serie_super_vs_costos.csv"))
+cat("CSV:", fs::path(DIR_COV, "serie_super_vs_costos.csv"), "\n")
+
+cat("\nCorrelation (log levels) of the pump price with each reference\n")
+print(d[, .(brent=round(cor(log(super_usd_l), log(brent_usd_l)),3),
+            fob=round(cor(log(super_usd_l), log(fob_usd_l)),3),
+            paridad=round(cor(log(super_usd_l), log(paridad_usd_l)),3))])
+cat("\nBy regime: pump price in USD/l (parallel and official rate), references and gaps (medians)\n")
+print(d[, .(meses=.N, super_blue=round(median(super_usd_bl),3), super_of=round(median(super_usd_of),3),
+            fob=round(median(fob_usd_l),3), paridad=round(median(paridad_usd_l),3),
+            ratio_brent=round(median(super_usd_bl/brent_usd_l),2),
+            brecha_fob=percent(median(super_usd_bl/fob_usd_l-1), accuracy=1),
+            brecha_par_blue=percent(median(super_usd_bl/paridad_usd_l-1), accuracy=1),
+            brecha_par_of=percent(median(super_usd_of/paridad_usd_l-1), accuracy=1)), by=regime])
+cat("\nBy year: pump price (parallel and official rate), gap over FOB and over parity (median, parallel rate)\n")
+print(d[, .(super_blue=round(median(super_usd_bl),3), super_of=round(median(super_usd_of),3),
+            fob=round(median(fob_usd_l),3), paridad=round(median(paridad_usd_l),3),
+            obs=sum(paridad_fuente=="observada"),
+            brecha_fob=percent(median(super_usd_bl/fob_usd_l-1), accuracy=1),
+            brecha_par=percent(median(super_usd_bl/paridad_usd_l-1), accuracy=1),
+            brecha_par_of=percent(median(super_usd_of/paridad_usd_l-1), accuracy=1)), by=.(anio=year(mes))])
+cat("\nFigures K1-K4 and monthly series done.\n")
+
