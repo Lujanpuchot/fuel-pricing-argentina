@@ -3,7 +3,8 @@
 # to the station panel, which leaves the final panel with a `departamento` column.
 #
 # Input:  eess_all_cleaned7_alternative_sinceappearance.rds
-#         crosswalk_localidad_departamento.csv  (frozen crosswalk, read by default)
+#         crosswalk_localidad_departamento.csv  (frozen crosswalk, read by default;
+#                                                a copy ships in data/)
 #         crosswalk_correcciones_auditoria.csv  (reviewed corrections; rebuild only)
 #         georef_departamentos_ref.csv          (official list of departments)
 # Output: eess_all_cleaned7_alternative_sinceappearance_con_crosswalk.rds
@@ -45,10 +46,16 @@ REBUILD_FROM_API <- FALSE   # TRUE rebuilds the crosswalk from georef (about 5 m
 # Paths ----
 DIR_INT  <- DIR_INTERIM
 BASE_IN  <- file.path(DIR_INT, "eess_all_cleaned7_alternative_sinceappearance.rds")
-XW_OUT   <- file.path(DIR_INT, "crosswalk_localidad_departamento.csv")
 BASE_OUT <- file.path(DIR_INT, "eess_all_cleaned7_alternative_sinceappearance_con_crosswalk.rds")
-XW_CORR  <- file.path(DIR_INT, "crosswalk_correcciones_auditoria.csv")   # sep = "|"
 REF_DEP  <- file.path(DIR_INT, "georef_departamentos_ref.csv")           # official list of departments
+
+# The frozen crosswalk and its corrections also ship with the repository, so this
+# step runs without calling the API. A copy in the interim folder takes
+# precedence, and a rebuild always writes there, never over the copy in data/.
+XW_OUT  <- file.path(DIR_INT, "crosswalk_localidad_departamento.csv")
+XW_IN   <- if (file.exists(XW_OUT)) XW_OUT else file.path("data", "crosswalk_localidad_departamento.csv")
+XW_CORR <- file.path(DIR_INT, "crosswalk_correcciones_auditoria.csv")   # sep = "|"
+if (!file.exists(XW_CORR)) XW_CORR <- file.path("data", "crosswalk_correcciones_auditoria.csv")
 
 `%||%` <- function(a, b) if (is.null(a) || length(a) == 0 || identical(a, "")) b else a
 
@@ -126,10 +133,10 @@ b <- readRDS(BASE_IN); setDT(b)
 base_pairs <- unique(b[, .(provincia, loc = trimws(localidad))])
 
 # 1. Get the crosswalk: read the frozen file, or rebuild it and correct it ----
-if (!REBUILD_FROM_API && file.exists(XW_OUT)) {
+if (!REBUILD_FROM_API && file.exists(XW_IN)) {
 
-  message("Loading frozen crosswalk: ", basename(XW_OUT))
-  xw <- fread(XW_OUT, encoding = "UTF-8")
+  message("Loading frozen crosswalk: ", XW_IN)
+  xw <- fread(XW_IN, encoding = "UTF-8")
   if (!"fuente" %in% names(xw)) xw[, fuente := "georef"]   # file saved without the fuente column
   xw <- xw[, .(provincia, localidad, departamento = as.character(departamento), fuente)]
   xw[trimws(departamento) == "" | departamento == "NA", departamento := NA]

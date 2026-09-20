@@ -18,7 +18,7 @@ The main source is the monthly price and volume report that fuel outlets file wi
 
 The rest comes from public sources: the government's georef API, OpenStreetMap/Nominatim and the kilometre posts of the national highway agency (geocoding); INDEC population projections, the 2022 census and the 2017-18 household expenditure survey; registered wages and employment by department from CEP-XXI and OEDE; the Energy Secretariat's downstream tables (sales by company, refinery runs, fuel imports); Brent and US Gulf Coast gasoline prices from FRED; and the official exchange rate from the Central Bank.
 
-Raw and intermediate files add up to about 10 GB and are not part of the repository.
+Raw and intermediate files add up to about 10 GB and are not part of the repository. The locality-to-department crosswalk, which was built once and corrected by hand, is in [data/](data/), together with a note on where each external source comes from.
 
 ## Repository layout
 
@@ -56,7 +56,7 @@ Each script reads the file the previous one wrote and saves its own, so the pipe
 | `05_business_type.R` | Infers the type of outlet from the products it sells and harmonizes it over time | 5,054,907 |
 | `06_markets.R` | Assigns every locality to a department and adds that column to the panel | 5,054,907 |
 
-Departments are the markets of the demand model. The crosswalk has 473 market units: departments, the City of Buenos Aires as a single market, and a few isolated settlements with one station. With localities as markets, close to half of them have a single brand; with departments, the share of stations in single-brand markets falls from 11.5% to 2.2%.
+Departments are the markets of the demand model: 1,398 localities over 458 departments, with the City of Buenos Aires as a single market. With localities as markets, close to half of them have a single brand; with departments, the share of stations in single-brand markets falls from 11.5% to 2.2%. The crosswalk is in [data/](data/), so this step runs without calling the API.
 
 `diagnostics_data_quality.R` is the diagnostic pass on volumes and prices behind the thresholds in scripts 2 and 3. It does not modify the panel and `run_all.R` does not call it.
 
