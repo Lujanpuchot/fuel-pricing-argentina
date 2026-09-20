@@ -10,7 +10,7 @@ This repository contains the data work the estimation builds on: the station-lev
 
 ![YPF's price gap against the private brands, by government](docs/figures/ypf_private_gap_by_government.png)
 
-*Price of YPF against the large private brands, compared within the same locality and month, so the gap is not driven by where each brand sits. The grey line is the median across localities, month by month; the blue segment is the mean of each government with an interval from the spread of locality means. Two things to note. The gap is already there in 2005-2012, while YPF belonged to Repsol, and it closes over 2016-2019, the only years pump prices were free. And ownership cannot be separated from policy here: YPF was privately owned only in years when prices were also being negotiated with the government, which is why the thesis identifies the weight on consumer surplus from the pricing conditions rather than from this comparison. The unbranded outlets, not drawn, sit above the large private brands in every block, by 0.6 to 4 percent. Drawn by `code/figure_readme.R`.*
+*Price of YPF against the large private brands, compared within the same locality and month, so the gap is not driven by where each brand sits. The thick line is the mean of each period; the faint one is the median across localities, month by month. Periods are labelled by what the government did with pump prices, and coloured by whether it set them: the one period it did not is the only one in which YPF does not sell below the private brands. Ownership and policy cannot be separated here, since YPF was privately owned only in years when prices were also being negotiated with the government, which is why the thesis identifies the weight on consumer surplus from the pricing conditions rather than from this comparison. Deregulation is dated from October 2017 and the block still contains the freeze agreed in May 2018. The unbranded outlets, not drawn, sit above the large private brands in every period, by 0.6 to 4 percent. Drawn by `code/figure_readme.R`.*
 
 ## Data
 
@@ -88,6 +88,25 @@ Market structure and brand shares, the YPF-private price gap, volumes and report
 ![Pump price of regular gasoline against Brent](docs/figures/pump_price_vs_brent.png)
 
 *National median pre-tax price of regular gasoline against Brent, in USD per litre. Brent is quoted in dollars; the pump price is converted at the parallel exchange rate, which is the one that keeps the series comparable over a period when the official rate was held far from the market. The bottom panel is the ratio of the two. It is a comparison, not a margin: YPF refines domestic crude, which was priced well below Brent in several of these years. Dashed lines mark the 2012 renationalization, the 2017 deregulation and the 2019 price freeze. Drawn by `code/figure_readme.R` from the series that section 5 of `code/10_descriptives.R` writes.*
+
+## Where YPF is the only brand
+
+A second question the panel answers without a model: what does a brand do where it has no rival? Single-brand departments are common in the periphery, and most of them are YPF's.
+
+Take each outlet's pre-tax price as a deviation from the average of its province and product, and compare, for one brand, the departments where it competes with those where it is the only one. The difference is what that brand charges for being alone.
+
+| 2024 | Competing | Alone | Premium |
+|---|---:|---:|---:|
+| Large private brands | +1.0% | +5.3% | **+4.3 pp** |
+| YPF | -0.2% | -0.2% | **-0.0 pp** |
+
+In 2024 a large private brand alone in its market charges 5.3% above its province, 4.3 points more than where it faces rivals. YPF charges what it charges anywhere else.
+
+One year is not the rule, and the twenty of them split into a robust part and a fragile one. The robust part is YPF: its premium stays flat around zero every year of the period, between -2.8 and +1.6 points and averaging +0.2, measured over 100 to 140 departments a year, and it does so under Repsol as much as under the state. Where YPF is alone, it does not price as a monopolist.
+
+The fragile part is the size of the private premium. It swings: +6 points in 2008-10, -6 in 2017, when deregulated private brands charged *less* where they were alone, +7 in 2022, +5 in 2024. It rests on 8 to 24 departments a year, and that scarcity is itself the finding, because the captive periphery is mostly YPF's. Pooled over 2005-2024 the difference between the two brands is 0.9 points and not significant (t = 0.76), so the 4.3 of 2024 is a peak of that series rather than its level.
+
+This is the descriptive side of what the model is for. A flat monopoly premium is consistent with a firm that puts weight on consumer surplus, but it is also consistent with a firm that prices near-uniformly across the country for reasons of its own, as retail chains often do. Telling the two apart needs the demand system, which is why the captive-versus-competitive contrast is a secondary result in the [analysis plan](docs/analysis_plan.md) and carries a band. The figures behind these numbers are in the thesis, not in this repository.
 
 ## Some things the data required
 

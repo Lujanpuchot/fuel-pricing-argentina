@@ -51,31 +51,42 @@ cm[, g_priv := p_ypf  / p_priv - 1]
 cm[, g_blan := p_blan / p_priv - 1]
 for (v in c("g_priv", "g_blan")) cm[abs(get(v)) > 0.4, (v) := NA_real_]
 
-# The blocks of the analysis plan. The 2019 freeze is kept apart from the rest of
-# the Macri years because prices were set by decree over those four months.
+# The blocks of the analysis plan, labelled by what the government did with pump
+# prices rather than by who was president: a reader outside Argentina can follow
+# the first and not the second. Ownership is named where it changes.
 CUTS <- as.Date(c("2004-12-01", "2012-05-01", "2016-01-01", "2019-08-01",
                   "2019-12-01", "2023-12-01", "2025-01-01"))
-LABS <- c("Repsol-owned", "State-owned\nFernández de Kirchner", "Macri",
-          "Freeze", "Fernández", "Milei")
+LABS <- c("Prices administered\nRepsol-owned",
+          "Prices administered\nstate-owned",
+          "Deregulation\nfrom Oct 2017",
+          "Freeze\nby decree",
+          "Prices administered",
+          "Guidance\nreported")
+# Whether the government set pump prices in each block. Deregulation is dated
+# from October 2017; the block also contains the freeze agreed in May 2018, so
+# it is called deregulation rather than free prices.
+REG <- c("Administered", "Administered", "Left to the firms",
+         "Administered", "Administered", "Administered")
+
 cm[, gov := cut(periodo_dt, breaks = CUTS, labels = LABS, right = FALSE)]
 
 # Median across localities, month by month
 ts <- cm[!is.na(g_priv), .(gap = median(g_priv)), by = .(producto, periodo_dt)]
 
-# Mean of each government. The gap is averaged within a locality first, so every
+# Mean of each block. The gap is averaged within a locality first, so every
 # locality counts once whatever its size; the interval is the spread of those
 # locality means. Localities are keyed with their province, since two provinces
 # can use the same name.
 loc <- cm[!is.na(g_priv), .(gl = mean(g_priv)), by = .(producto, gov, provincia, localidad)]
 seg <- loc[, .(est = mean(gl), se = sd(gl)/sqrt(.N), nloc = .N), by = .(producto, gov)]
 seg[, `:=`(lo = est - 1.96*se, hi = est + 1.96*se, gi = as.integer(gov))]
-seg[, `:=`(x0 = CUTS[gi], x1 = CUTS[gi + 1])]
+seg[, `:=`(x0 = CUTS[gi], x1 = CUTS[gi + 1], reg = REG[gi])]
 
-# The unbranded outlets are reported in the caption rather than drawn, to keep
-# the figure readable.
+# The unbranded outlets are reported here rather than drawn, to keep the figure
+# readable; the caption of the README carries the range.
 blan <- cm[!is.na(g_blan), .(gl = mean(g_blan)), by = .(producto, gov, provincia, localidad)
            ][, .(est = round(100*mean(gl), 2)), by = .(producto, gov)]
-cat("Unbranded outlets against the large private brands, mean by government (%):\n")
+cat("Unbranded outlets against the large private brands, mean by block (%):\n")
 print(blan)
 
 en <- function(x) factor(fifelse(x == "Gas Oil Grado 2", "Diesel (grade 2)", "Regular gasoline"),
@@ -84,35 +95,41 @@ ts[, prod_en := en(producto)]
 seg[, prod_en := en(producto)]
 
 divs <- data.table(x = CUTS[c(-1, -length(CUTS))])
-tags <- data.table(x = CUTS[-length(CUTS)] + diff(CUTS)/2, y = 0.045, lab = LABS,
+tags <- data.table(x = CUTS[-length(CUTS)] + diff(CUTS)/2, y = 0.048, lab = LABS,
+                   prod_en = factor("Regular gasoline",
+                                    levels = c("Regular gasoline", "Diesel (grade 2)")))
+own  <- data.table(x = as.Date("2012-05-01"),
                    prod_en = factor("Regular gasoline",
                                     levels = c("Regular gasoline", "Diesel (grade 2)")))
 
 g1 <- ggplot() +
   geom_vline(data = divs, aes(xintercept = x), color = "grey86", linewidth = .35) +
+  geom_vline(data = own, aes(xintercept = x), color = "grey45", linewidth = .5, linetype = "22") +
   geom_hline(yintercept = 0, color = "grey55", linewidth = .35) +
-  geom_line(data = ts, aes(periodo_dt, gap), color = "grey72", linewidth = .3) +
-  geom_rect(data = seg, aes(xmin = x0, xmax = x1, ymin = lo, ymax = hi),
-            fill = "#1F3864", alpha = .18) +
-  geom_segment(data = seg, aes(x = x0, xend = x1, y = est, yend = est),
-               color = "#1F3864", linewidth = 1.1) +
-  geom_text(data = tags, aes(x, y, label = lab), size = 2.5, color = "grey45",
-            vjust = 1, lineheight = .9) +
+  geom_line(data = ts, aes(periodo_dt, gap), color = "grey75", linewidth = .3) +
+  geom_rect(data = seg, aes(xmin = x0, xmax = x1, ymin = lo, ymax = hi, fill = reg), alpha = .18) +
+  geom_segment(data = seg, aes(x = x0, xend = x1, y = est, yend = est, color = reg),
+               linewidth = 1.2) +
+  geom_text(data = tags, aes(x, y, label = lab), size = 2.45, color = "grey40",
+            vjust = 1, lineheight = .92) +
   facet_wrap(~prod_en, ncol = 1) +
   scale_y_continuous(labels = percent_format(accuracy = 1)) +
   scale_x_date(date_breaks = "3 years", date_labels = "%Y",
                limits = c(CUTS[1], CUTS[length(CUTS)]), expand = c(0.005, 0)) +
-  coord_cartesian(ylim = c(-0.115, 0.05)) +
-  labs(title = "The gap is there under both owners, and closes in the years prices were free",
+  scale_color_manual(values = c("Administered" = "#1F3864", "Left to the firms" = "#C55A11")) +
+  scale_fill_manual(values  = c("Administered" = "#1F3864", "Left to the firms" = "#C55A11")) +
+  coord_cartesian(ylim = c(-0.115, 0.052)) +
+  labs(title = "YPF sells below the private brands whenever the government sets pump prices",
        subtitle = paste0("Price of YPF against the large private brands, compared within the same ",
-                         "locality and month. Negative means YPF is cheaper.\n",
-                         "Thick line: the mean of each government. Faint line: the median across ",
-                         "localities, month by month. Pre-tax price."),
-       x = NULL, y = NULL) +
+                         "locality and month. Negative means YPF is cheaper.\nThick line: the mean ",
+                         "of each period. Faint line: the median across localities, by month. ",
+                         "Dashed: YPF is taken over by the state, May 2012."),
+       x = NULL, y = NULL, color = "Pump prices", fill = "Pump prices") +
   theme_minimal(base_size = 11) +
   theme(plot.title = element_text(face = "bold", size = 13),
         plot.subtitle = element_text(color = "grey35", size = 9, lineheight = 1.25),
         plot.title.position = "plot",
+        legend.position = "top", legend.justification = "left",
         panel.grid.major.x = element_blank(),
         panel.grid.minor = element_blank(),
         panel.grid.major.y = element_line(color = "grey93"),
@@ -120,7 +137,7 @@ g1 <- ggplot() +
         axis.text = element_text(color = "grey40"))
 
 ggsave(file.path(DIR_FIG, "ypf_private_gap_by_government.png"), g1,
-       width = 9.4, height = 5.8, dpi = 200)
+       width = 9.6, height = 6.2, dpi = 200)
 cat("saved:", file.path(DIR_FIG, "ypf_private_gap_by_government.png"), "\n")
 
 # Figure 2: the pump price against crude ----
