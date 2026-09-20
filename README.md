@@ -4,7 +4,7 @@ Code for my M.A. thesis in Economics at Universidad de San Andrés, *When the St
 
 YPF is the largest fuel retailer in Argentina. It was renationalized in 2012, and governments of different signs have leaned on it to hold pump prices down. The thesis asks how far YPF's prices depart from profit maximization, under which administrations, what that cost the firm in forgone margin, and how much of it reached consumers. I estimate a random-coefficients logit demand for gasoline and diesel and a supply side in which YPF maximizes profit plus a weight λ on consumer surplus, and I compare YPF with private brands that face the same costs in the same markets.
 
-The design is described in [docs/research_proposal.md](docs/research_proposal.md). The choices fixed before estimating the model are recorded in [docs/analysis_plan.md](docs/analysis_plan.md).
+The design is described in [docs/research_proposal.md](docs/research_proposal.md). The choices fixed before estimating the model are recorded in [docs/analysis_plan.md](docs/analysis_plan.md), and what is still undecided about the data, with the evidence and the rule I am considering for each, in [docs/open_issues.md](docs/open_issues.md).
 
 This repository contains the data work the estimation builds on: the station-level panel, the geocoding of stations, spatial and market-level covariates, and the descriptive analysis.
 
@@ -43,6 +43,7 @@ data/                         the crosswalk and the geocoding reference tables
 docs/
   research_proposal.md
   analysis_plan.md
+  open_issues.md
   figures/
 ```
 
@@ -93,7 +94,7 @@ Market structure and brand shares, the YPF-private price gap, volumes and report
 
 **The volume tail has two separate causes.** Compressed natural gas carries implausibly large values that no percentile rule handles well, so `02_clean_volume.R` sets floors by product family instead. For gasoline and diesel a tail survives into the descriptives, and looking at it outlet by outlet it is not one problem but two. Thirty-two outlets, 0.4% of the total, report volumes about a thousand times too large in nearly every month they appear: their median outlet-month is 83,630, which divided by a thousand is 84, an ordinary outlet. They look like litres reported where the form asks for cubic metres, and they account for 8.1% of total volume. Another ninety outlets report normal volumes with occasional spikes, which is what a bulk delivery misclassified into the retail channel looks like.
 
-The two need different treatment, since rescaling recovers the first group and only trimming helps with the second. Neither is done in the panel yet. Section 3 of `10_descriptives.R` caps outlet-months at 3,000 m³ for its quantity figures, which brings annual volume of the two focal products to 10-17.5 million m³ against 222 million uncapped, but that cap is descriptive only and drops both groups alike. The rule for the model sample is still open.
+The two need different treatment, since rescaling recovers the first group and only trimming helps with the second. Neither is done in the panel yet. Section 3 of `10_descriptives.R` caps outlet-months at 3,000 m³ for its quantity figures, which brings annual volume of the two focal products to 10-17.5 million m³ against 222 million uncapped, but that cap is descriptive only and drops both groups alike. The rule for the model sample is still open; the candidates are in [docs/open_issues.md](docs/open_issues.md).
 
 **One stretch of the volume cleaning had been lost** and was rewritten from the saved intermediate files. It reproduces them exactly: same rows, columns, total volume and missing values.
 
