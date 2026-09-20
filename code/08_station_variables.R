@@ -1,4 +1,4 @@
-# 03_station_variables.R
+# 08_station_variables.R
 # Builds the station-level variables that describe each outlet's competitive
 # and cost environment. Each part writes its own file and none of them
 # modifies the analysis panel; they are merged into it by key when the
@@ -21,12 +21,12 @@ source("code/00_config.R")
 DIR_INT <- DIR_INTERIM
 INT     <- DIR_INTERIM
 
-# Part 1. Nearby rivals and distance to a refinery ----
+# 1. Nearby rivals and distance to a refinery ----
 
 # Spatial variables of the model: geodesic distance from each station to the
 # nearest refinery, and distance to and number of nearby rival stations by year.
 #
-# Input:  geocodificacion_final.csv (consolidated output of code/02_geocoding)
+# Input:  geocodificacion_final.csv (consolidated output of code/07_geocode_stations.R)
 #         eess_all_cleaned7_alternative_sinceappearance_con_crosswalk.rds
 # Output: variables_espaciales_estacion.csv  one row per boca (outlet), time-invariant
 #           d_refineria_km      km to the nearest refinery (cost shifter)
@@ -145,7 +145,7 @@ print(res[, .(mediana_d_rival = round(median(d_rival_min, na.rm = TRUE), 2),
               mediana_n_5km   = as.numeric(median(n_riv_5km)),
               cobertura_media = round(mean(cobertura_exacta, na.rm = TRUE), 1)), by = anio][order(anio)])
 
-# Part 2. Refinery of the station's own brand ----
+# 2. Refinery of the station's own brand ----
 
 # Distance from each station to the nearest refinery of its own brand, by
 # station-year (the bandera (brand) of a station changes with rebrandings).
@@ -250,7 +250,7 @@ cat("\nexample: SHELL stations in Mendoza (the province of the Luján de Cuyo re
 mz <- merge(res[familia=="SHELL" & anio==2015], g[, .(nro_inscripcion, provincia)], by="nro_inscripcion")
 print(mz[norm(provincia)=="MENDOZA", .(mediana_d_marca_km = round(median(d_refineria_marca_km)), n=.N)])
 
-# Part 3. Dispatch plants ----
+# 3. Dispatch plants ----
 
 # Roster of dispatch plants by brand, built from the wholesale data, and distance
 # from each station to the nearest plant of its own brand (the actual freight leg).
@@ -391,7 +391,7 @@ print(cmp[!is.na(d_planta_marca_km),
           .(d_planta = round(median(d_planta_marca_km)), d_refineria = round(median(d_ref)),
             n = .N), by=familia][order(-n)])
 
-# Part 4. On-highway indicator ----
+# 4. On-highway indicator ----
 
 # Geometric indicator of whether a station is on a highway, from its distance to
 # the OpenStreetMap trunk road network.
@@ -472,7 +472,7 @@ cat("  - tipo 'urbana' with sobre_ruta=1: highways crossing a town, which the ad
 cat("\nmedian d_ruta_km by text-based tipo:\n")
 print(out[, .(mediana_km = round(median(d_ruta_km),3), n = .N), by = tipo_texto])
 
-# Part 5. Borders, cities and regions ----
+# 5. Borders, cities and regions ----
 
 # Time-invariant geographic variables by station: distance to the border and to
 # the nearest road crossing, to large cities and to Buenos Aires, Patagonia flag.
@@ -585,7 +585,7 @@ print(out[, .(d_frontera_km = round(median(d_frontera_km)),
               d_ciudad_km   = round(median(d_ciudad_km)),
               d_gba_km      = round(median(d_gba_km))), by = patagonia_icl])
 
-# Part 6. Station amenities ----
+# 6. Station amenities ----
 
 # Station amenities (shop, CNG, 24 h, official vertical form), from a spatial
 # match between the panel stations and the brands' station-locator listings.

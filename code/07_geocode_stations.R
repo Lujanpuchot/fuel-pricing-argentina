@@ -1,4 +1,4 @@
-# 02_geocode_stations.R
+# 07_geocode_stations.R
 # Coordinates for the outlets that sell to the public. The source has addresses
 # but no coordinates, so each part adds a layer over the outlets the previous
 # parts left unresolved, and every coordinate carries a precision label
@@ -25,7 +25,7 @@ DIR     <- DIR_INTERIM
 
 UA <- sprintf("fuel-retail-geocoder/1.0 (academic research; %s)", CONTACT_EMAIL)
 
-# Part 1. Street address: georef and Nominatim ----
+# 1. Street address: georef and Nominatim ----
 
 # First geocoding pass: latitude and longitude of every retail station, kept in a
 # table of its own. The analysis panel is only read, to list the unique addresses.
@@ -228,9 +228,9 @@ cat("\nExact:", sum(fin$precision == "exacta"), "/", nrow(fin),
     sprintf(" (%.1f%%)\n", 100*mean(fin$precision == "exacta")))
 cat("File:", as.character(OUT_GEO), "\n")
 
-# Part 2. Urban addresses: structured search ----
+# 2. Urban addresses: structured search ----
 
-# Second geocoding pass: the stations that 01_geocode_addresses.R left as
+# Second geocoding pass: the stations that section 1 left as
 # "aproximada" are tried again with the structured search of Nominatim.
 #
 # Input:  geocodificacion_estaciones.csv (not modified), centroides_departamento.csv
@@ -239,7 +239,7 @@ cat("File:", as.character(OUT_GEO), "\n")
 # The structured search takes street and number, city, county (the department) and
 # state (the province) as separate fields.
 #
-# Do not run at the same time as 01_geocode_addresses.R. Nominatim allows 1 request
+# Do not run two geocoding passes at once. Nominatim allows 1 request
 # per second in total, and two processes risk getting the IP address blocked.
 #
 # With the environment variable GEO_PARSE_ONLY=1 the script makes no requests and
@@ -377,7 +377,7 @@ for (i in seq_len(nrow(pend))) {
 }
 cat("\nSecond pass done. Rescued:", n_ok, "of", nrow(pend), "\n")
 
-# Part 3. Locality centroids and consolidation ----
+# 3. Locality centroids and consolidation ----
 
 # Locality-centroid tier of the geocoding, and consolidation of all tiers into one
 # file with a graded precision column.
@@ -496,7 +496,7 @@ ub[, `:=`(refineria_cercana = REF$refineria[idx],
 fwrite(ub[, .(nro_inscripcion, precision, refineria_cercana, d_refineria_km)], OUT_E, na = "NA", bom = TRUE)
 cat("\nDistance to refinery recomputed for", nrow(ub), "located stations (exact or locality)\n")
 
-# Part 4. Audit of exact matches ----
+# 4. Audit of exact matches ----
 
 # Audit of the "exact" matches: urban stations geocoded far from the center of
 # their own town are geocoded again, and then corrected or downgraded.
@@ -520,10 +520,10 @@ cat("\nDistance to refinery recomputed for", nrow(ub), "located stations (exact 
 #     downgraded to the locality centroid;
 #   - no such point, and the original was 10-20 km away (may be a large city): left
 #     unchanged.
-# Urban addresses only; highway addresses are handled in 05_geocode_route_km.R.
+# Urban addresses only; highway addresses are handled in section 5.
 #
 # Test run on 8 stations, which leaves the final file untouched:
-#   GEO_N_TEST=8 Rscript code/02_geocoding/04_audit_exact_matches.R
+#   GEO_N_TEST=8 Rscript code/07_geocode_stations.R   (stops after this section)
 
 options(timeout = 60)
 
@@ -543,7 +543,7 @@ haversine <- function(lat1, lon1, lat2, lon2) {
   2*R*asin(pmin(1, sqrt(a)))
 }
 
-# Address parser (same as in 02_geocode_structured_search.R) ----
+# Address parser (same as in section 2) ----
 limpia_dir <- function(x){
   s0 <- as.character(x)
   s0 <- gsub("([a-z])([A-Z])", "\\1 \\2", s0)
@@ -683,7 +683,7 @@ cols <- c("provincia","localidad","nro_inscripcion","departamento","direccion","
 fwrite(g[, ..cols], FIN, na = "NA", bom = TRUE)
 cat("\ngeocodificacion_final.csv overwritten\n")
 
-# Part 5. Highway addresses: kilometre posts ----
+# 5. Highway addresses: kilometre posts ----
 
 # Locate "RUTA X km Y" addresses with the kilometer posts published by the national
 # highway agency (Dirección Nacional de Vialidad, DNV).
@@ -796,7 +796,7 @@ cols <- c("provincia","localidad","nro_inscripcion","departamento","direccion","
 fwrite(g[, ..cols], FIN, na="NA", bom=TRUE)
 cat("geocodificacion_final.csv overwritten\n")
 
-# Part 6. Official coordinates ----
+# 6. Official coordinates ----
 
 # Overlay the official coordinates of the Energy Secretariat (Secretaría de
 # Energía) as the last layer of the geocoding.

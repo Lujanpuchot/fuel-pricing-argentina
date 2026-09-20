@@ -1,4 +1,4 @@
-# 04_market_data.R
+# 09_market_data.R
 # Downloads and builds the market-level variables the demand and supply models
 # need: population, wages and employment by department, national price and
 # exchange rate series, the downstream tables of the Energy Secretariat,
@@ -23,7 +23,7 @@ source("code/00_config.R")
 DIR <- DIR_COVAR
 options(timeout = 120)
 
-# Part 1. Wages and employment by department ----
+# 1. Wages and employment by department ----
 
 # Mean wage and registered employment by department and month. Demand-side
 # covariate for the BLP model (heterogeneity in price sensitivity).
@@ -87,7 +87,7 @@ cat("[covar_ingreso_empleo_depto.csv]", nrow(D), "rows |", uniqueN(D$codigo_depa
     "departments |", as.character(min(D$fecha)), "to", as.character(max(D$fecha)), "\n")
 cat("NA after recoding -99:", paste(valcols, sapply(valcols, function(c) sum(is.na(D[[c]]))), collapse=" | "), "\n")
 
-# Part 2. Wages extended to 2004-2024 ----
+# 2. Wages extended to 2004-2024 ----
 
 # Extends the department wage series to the whole sample period, 2004-01 to
 # 2024-12, with the wage series published by OEDE (Ministry of Labor).
@@ -317,7 +317,7 @@ print(ext[codigo_departamento_indec==2000 &
                                "2023-11-01","2023-12-01","2024-12-01")),
           .(fecha, w_mean_total, fuente_w)])
 
-# Part 3. Population by department ----
+# 3. Population by department ----
 
 # Population by department and year, the market-size covariate of the BLP
 # demand model.
@@ -448,7 +448,7 @@ chk <- out[, .(deptos=.N, tot=sum(poblacion)), by=anio][order(anio)]
 cat("\nnational total by year:\n")
 print(chk[anio %in% c(2004,2007,2009,2010,2015,2022,2025)])
 
-# Part 4. Population anchored to the 2022 census ----
+# 4. Population anchored to the 2022 census ----
 
 # Variant of the department population series anchored to the 2022 census.
 #
@@ -518,7 +518,7 @@ g <- out[order(codigo_departamento_indec, anio),
          .(gmax = max(abs(diff(log(poblacion_censal))), na.rm=TRUE)), by=codigo_departamento_indec]
 cat("  p99 =", round(100*quantile(g$gmax, .99, na.rm=TRUE),2), "% | max =", round(100*max(g$gmax, na.rm=TRUE),2), "%\n")
 
-# Part 5. Downstream tables: sales, refining and imports ----
+# 5. Downstream tables: sales, refining and imports ----
 
 # Aggregates the SESCO downstream tables of the Energy Secretariat: fuel sales,
 # refinery runs and foreign trade.
@@ -630,7 +630,7 @@ g <- E[tipo=="Importación" & grepl("^Gasoil", producto) & cantidad > 1000,
 print(g)
 cat("(expected: it tracks crude; peak in 2022, above 1,000 USD/m3, with the diesel shortage)\n")
 
-# Part 6. National series: prices, crude and exchange rate ----
+# 6. National series: prices, crude and exchange rate ----
 
 # National and international monthly series, 2004-01 to 2024-12: spliced CPI,
 # Brent, US spot prices of refined products and the official exchange rate.
@@ -834,7 +834,7 @@ if (fs::file_exists(f_ce)) {
               cmp[, cor(vu_imp_nafta_usd_m3, brent_usd_bbl)]))
 }
 
-# Part 7. Household survey moments ----
+# 7. Household survey moments ----
 
 # Fuel expenditure by income decile and car ownership by province, from the
 # 2017-18 household expenditure survey (ENGHo, INDEC).
@@ -920,7 +920,7 @@ cat("\nchecks: budget share d1 =", MM[decil==1, share_presupuesto],
     "% and d10 =", MM[decil==10, share_presupuesto],
     "% | car ownership d1 =", MM[decil==1, pct_tiene_auto], "% and d10 =", MM[decil==10, pct_tiene_auto], "%\n")
 
-# Part 8. Upstream unit cost ----
+# 8. Upstream unit cost ----
 
 # Upstream unit cost of fuel (cU) for nafta (gasoline) and gasoil (diesel),
 # national, monthly and quarterly, plus a provincial step (delta_prov) estimated

@@ -23,14 +23,19 @@ Raw and intermediate files add up to about 10 GB and are not part of the reposit
 ## Repository layout
 
 ```
-run_all.R                     runs the five scripts below, in order
+run_all.R                     runs the ten scripts below, in order
 code/
-  00_config.R                 paths, read from the FUEL_DATA_ROOT environment variable
-  01_clean_panel.R            raw files -> analysis panel, and the markets of the model
-  02_geocode_stations.R       coordinates for every outlet
-  03_station_variables.R      rivals, distances, highway and border indicators
-  04_market_data.R            population, wages, prices and costs by market
-  05_descriptives.R           tables and figures
+  00_config.R                 where the data are
+  01_build_panel.R            joins the six raw files
+  02_clean_volume.R           parses volume, drops implausible values
+  03_clean_prices.R           drops corrupt prices
+  04_deduplicate.R            removes duplicate records
+  05_business_type.R          infers the type of each outlet
+  06_markets.R                locality -> department, the market of the model
+  07_geocode_stations.R       coordinates for every outlet
+  08_station_variables.R      rivals, distances, highway and border indicators
+  09_market_data.R            population, wages, prices and costs by market
+  10_descriptives.R           tables and figures
   diagnostics_data_quality.R  how the cleaning thresholds were chosen
 docs/
   research_proposal.md
@@ -38,34 +43,34 @@ docs/
   figures/
 ```
 
-Each script is divided into parts, marked with section headers, and each part reads the file the previous one wrote. A script can be restarted at any part.
+Each script reads the file the previous one wrote and saves its own, so the pipeline can be picked up where it stopped instead of rebuilt from the raw files every time.
 
 ### 1. Building the panel
 
-| Part of `01_clean_panel.R` | What it does | Rows after |
+| Script | What it does | Rows after |
 |---|---|---:|
-| 1. Bind the raw files | Joins the six raw files, harmonizes period and variable names | 5,346,549 |
-| 2. Volume | Parses volume, sets implausibly large values to missing, drops records with missing or negligible volume | 5,289,163 |
-| 3. Prices | Drops records with extreme pre-tax prices | 5,287,478 |
-| 4. Duplicate records | Removes exact duplicates across and within source files | 5,054,907 |
-| 5. Type of outlet | Infers the type of outlet from the products it sells and harmonizes it over time | 5,054,907 |
-| 6. Markets | Assigns every locality to a department and adds that column to the panel | 5,054,907 |
+| `01_build_panel.R` | Joins the six raw files, harmonizes period and variable names | 5,346,549 |
+| `02_clean_volume.R` | Parses volume, sets implausibly large values to missing, drops records with missing or negligible volume | 5,289,163 |
+| `03_clean_prices.R` | Drops records with extreme pre-tax prices | 5,287,478 |
+| `04_deduplicate.R` | Removes exact duplicates across and within source files | 5,054,907 |
+| `05_business_type.R` | Infers the type of outlet from the products it sells and harmonizes it over time | 5,054,907 |
+| `06_markets.R` | Assigns every locality to a department and adds that column to the panel | 5,054,907 |
 
 Departments are the markets of the demand model. The crosswalk has 473 market units: departments, the City of Buenos Aires as a single market, and a few isolated settlements with one station. With localities as markets, close to half of them have a single brand; with departments, the share of stations in single-brand markets falls from 11.5% to 2.2%.
 
-`diagnostics_data_quality.R` is the diagnostic pass on volumes and prices behind the thresholds in parts 2 and 3. It does not modify the panel and `run_all.R` does not call it.
+`diagnostics_data_quality.R` is the diagnostic pass on volumes and prices behind the thresholds in scripts 2 and 3. It does not modify the panel and `run_all.R` does not call it.
 
 ### 2. Geocoding
 
-The source has addresses but no coordinates. `02_geocode_stations.R` runs as a cascade: the georef API and Nominatim on the street address, a structured Nominatim search for the urban addresses that failed, kilometre posts for addresses of the form "Ruta 9 km 412", an audit of matches that landed in the wrong town because of common street names, and finally the official coordinates that the Energy Secretariat publishes for part of the stations, which take precedence. Every coordinate carries a precision label. 88.6% of stations end up with an exact location, 10.1% with the centroid of their locality, 0.9% with the centroid of their department, and 27 stations could not be located.
+The source has addresses but no coordinates. `07_geocode_stations.R` runs as a cascade: the georef API and Nominatim on the street address, a structured Nominatim search for the urban addresses that failed, kilometre posts for addresses of the form "Ruta 9 km 412", an audit of matches that landed in the wrong town because of common street names, and finally the official coordinates that the Energy Secretariat publishes for part of the stations, which take precedence. Every coordinate carries a precision label. 88.6% of stations end up with an exact location, 10.1% with the centroid of their locality, 0.9% with the centroid of their department, and 27 stations could not be located.
 
 ### 3. Station variables
 
-The number of nearby rivals, distance to the nearest refinery and to the refinery and dispatch plant of the station's own brand, distance to the border, a geometric on-highway indicator based on the OSM trunk network, and station amenities. Each part writes its own file and none of them modifies the panel; they are merged in by key when the estimation sample is assembled.
+The number of nearby rivals, distance to the nearest refinery and to the refinery and dispatch plant of the station's own brand, distance to the border, a geometric on-highway indicator based on the OSM trunk network, and station amenities. Each script writes its own file and none of them modifies the panel; they are merged in by key when the estimation sample is assembled.
 
 ### 4. Market data
 
-Population by department and year (market size), wages and employment by department and month, a consumer price index spliced from provincial indices for 2007-2015, when the official index is not reliable, Brent, the exchange rate, downstream sales and imports, moments from the household expenditure survey, and an upstream unit cost built in layers (crude, refining, biofuel blending). Most parts download their own source data and cache it.
+Population by department and year (market size), wages and employment by department and month, a consumer price index spliced from provincial indices for 2007-2015, when the official index is not reliable, Brent, the exchange rate, downstream sales and imports, moments from the household expenditure survey, and an upstream unit cost built in layers (crude, refining, biofuel blending). Most of these scripts download their own source data and cache it.
 
 ### 5. Descriptives
 
@@ -87,7 +92,7 @@ One stretch of the volume cleaning had been lost and was rewritten from the save
 
 The scripts were written in R 4.5 and use `data.table`, `fs`, `readxl`, `openxlsx`, `ggplot2`, `scales`, `knitr`, `sf`, `rnaturalearth`, `jsonlite`, `httr` and `pdftools`.
 
-Set `FUEL_DATA_ROOT` to the folder that holds the data tree (for example in `~/.Renviron`), then from the repository root run
+The scripts look for the data folder on their own (see `code/00_config.R`); on another machine, set `FUEL_DATA_ROOT` to it, for example in `~/.Renviron`. Then, from the repository root, run
 
 ```
 Rscript run_all.R

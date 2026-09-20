@@ -1,11 +1,11 @@
-# 05_descriptives.R
+# 10_descriptives.R
 # Descriptive evidence on the retail fuel market: the structure of the market
 # and how it changed, the price gap between YPF and the private brands, volumes
 # and shares, what stations look like, and the pump price against crude and
 # import parity.
 #
 # Input:  the analysis panel, with the department crosswalk from part 3 of
-#         03_station_variables.R, and the cost series from 04_market_data.R
+#         08_station_variables.R, and the cost series from 09_market_data.R
 # Output: LaTeX tables in <DIR_OUTPUT>/Tablas and figures in
 #         <DIR_OUTPUT>/Graficos
 #
@@ -29,7 +29,7 @@ DIR_TABLES  <- fs::path(DIR_OUT_NEW, "Tablas")
 DIR_FIGURES <- fs::path(DIR_OUT_NEW, "Gráficos")
 DIR_INPUT   <- DIR_INTERIM
 
-# Part 1. Market structure ----
+# 1. Market structure ----
 
 # Descriptive tables and figures on market structure from the final analysis
 # panel: outlets, operators, brands, business types, volumes and prices.
@@ -1903,7 +1903,7 @@ cat("- g13_share_anual_banderas_estaciones.png\n")
 cat("- g14_top10_banderas_ultimo_anio_estaciones.png\n")
 cat("- g15_top10_banderas_ultimo_anio_volumen.png\n")
 
-# Part 2. Price gap: YPF against the private brands ----
+# 2. Price gap: YPF against the private brands ----
 
 # Robustness checks (figures R1-R4) of figure 1, the price gap between YPF (the
 # state-controlled firm) and rival brands.
@@ -2053,7 +2053,7 @@ cat("\nR4: % of locality-months where YPF is cheaper (g_priv < 0)\n")
 print(cm[!is.na(g_priv), .(pct_ypf_mas_barata=round(mean(g_priv<0)*100,1), celdas=.N), by=.(producto,regime)][order(producto,regime)])
 cat("\nFigures R1-R4 done.\n")
 
-# Part 3. Volumes, shares and reporting gaps ----
+# 3. Volumes, shares and reporting gaps ----
 
 # Quantities, market shares and reporting gaps in the station panel: reporting
 # gaps (Q1), shares in volume vs. outlets (Q2), volume HHI (Q3), outlet size (Q4).
@@ -2061,7 +2061,7 @@ cat("\nFigures R1-R4 done.\n")
 # Input:  eess_all_cleaned7_alternative_sinceappearance_con_crosswalk.rds
 # Output: tables 29-32 (Tablas/) and figQ1-figQ4 (Gráficos/)
 
-# Paths (same layout as 01_market_structure.R) ----
+# Paths ----
 FILE_BASE   <- fs::path(DIR_INPUT, "eess_all_cleaned7_alternative_sinceappearance_con_crosswalk.rds")
 
 # Figures are written to a local temporary folder and then copied to the synced
@@ -2073,7 +2073,7 @@ fs::dir_create(DIR_FIGURES, recurse = TRUE)
 if (!fs::file_exists(FILE_BASE)) stop("Input file with crosswalk not found: ", FILE_BASE)
 
 # Helpers ----
-# LaTeX table writer as in 01_market_structure.R. fmt_n() uses a period as
+# LaTeX table writer as in section 1. fmt_n() uses a period as
 # thousands separator, as in the Spanish tables.
 save_tex_table <- function(df, file_path, caption = NULL, label = NULL, align = NULL) {
   tex <- knitr::kable(df, format = "latex", booktabs = TRUE, longtable = FALSE,
@@ -2084,7 +2084,7 @@ save_tex_table <- function(df, file_path, caption = NULL, label = NULL, align = 
 }
 fmt_n <- function(x) format(round(x), big.mark = ".", scientific = FALSE, trim = TRUE)
 
-# Brand groups, products and regimes (same as 02_ypf_private_gap.R) ----
+# Brand groups, products and regimes (same as section 2) ----
 PRIV   <- c("SHELL C.A.P.S.A.", "ESSO PETROLERA ARGENTINA S.R.L", "AXION",
             "PETROBRAS", "Pampa Energia", "PUMA", "OIL COMBUSTIBLES S.A.")
 BLANCA <- c("BLANCA", "SIN EMPRESA BANDERA")
@@ -2120,7 +2120,7 @@ pm <- f[, .(vol = sum(vol), n_filas = .N),
 pm[, tt := (year(periodo_dt) - 2004L) * 12L + month(periodo_dt)]
 pm[, regime := regime_of(periodo_dt)]
 # Market id: province x department, with departments taken from the crosswalk
-# (code/03_spatial_variables/crosswalk_locality_department.R). Department names
+# (code/06_markets.R). Department names
 # repeat across provinces, so counting `departamento` alone undercounts markets.
 pm[, mercado := paste0(provincia, "||", departamento)]
 
@@ -2134,7 +2134,7 @@ cat("outlets:", uniqueN(pm$nro_inscripcion), "| markets (province x department):
 # Q1. Reporting gaps in the panel (table 29, figQ1) ----
 # A missing outlet-month is a month inside the active span of the outlet (first
 # to last appearance) with no row. The data hold no zeros, because cleaned3_cut
-# (01_build_panel/02_clean_volume.R) keeps volume >= 1e-3, so "did not report"
+# (02_clean_volume.R) keeps volume >= 1e-3, so "did not report"
 # and "sold nothing" cannot be told apart.
 sp <- pm[, .(tt0 = min(tt), tt1 = max(tt), nobs = .N), by = .(nro_inscripcion, producto)]
 sp[, nmeses := tt1 - tt0 + 1L][, huecos := nmeses - nobs][, pct_hueco := huecos / nmeses]
@@ -2262,7 +2262,7 @@ ggsave(fs::path(DIR_TMP, "figQ2_share_ypf_volumen_vs_bocas.png"), gQ2, width = 9
 # Firm definition: branded stations compete as one brand, while blancas
 # (unbranded) are independent, one firm per CUIT (tax id) or per outlet when the
 # CUIT is missing. Same convention as the market-definition diagnostics in
-# crosswalk_locality_department.R.
+# 06_markets.R.
 pmv[, firma := fifelse(grupo == "Blancas",
                       paste0("BLANCA::", fifelse(is.na(cuit) | trimws(cuit) == "",
                                                  as.character(nro_inscripcion), as.character(cuit))),
@@ -2336,7 +2336,7 @@ cat("\nOutput\n")
 cat("tables 29-32 written to", as.character(DIR_TABLES), "\n")
 cat("figures copied:", sum(ok), "/", length(figs), "to", as.character(DIR_FIGURES), "\n")
 
-# Part 4. Station characteristics ----
+# 4. Station characteristics ----
 
 # Inventory of observable station characteristics, the X of the BLP demand model:
 # variation within and between markets (C1, C2) and highway vs. urban location (C3).
@@ -2344,7 +2344,7 @@ cat("figures copied:", sum(ok), "/", length(figs), "to", as.character(DIR_FIGURE
 # Input:  eess_all_cleaned7_alternative_sinceappearance_con_crosswalk.rds
 # Output: tables 33-34 (Tablas/), figC1 and figC2 (Gráficos/)
 
-# Paths (same layout as 01_market_structure.R) ----
+# Paths ----
 FILE_BASE   <- fs::path(DIR_INPUT, "eess_all_cleaned7_alternative_sinceappearance_con_crosswalk.rds")
 # Figures go to a local temporary folder first and are copied to the synced
 # output folder at the end, because the sync client locks files being written.
@@ -2359,8 +2359,8 @@ save_tex_table <- function(df, file_path, caption = NULL, label = NULL, align = 
 }
 
 # Products, brand groups and text patterns ----
-# Same products, brand groups and core provinces as 02_ypf_private_gap.R and
-# 03_quantities_shares.R.
+# Same products, brand groups and core provinces as sections 2 and 3.
+#
 PRODS <- c("Nafta (súper) entre 92 y 95 Ron","Gas Oil Grado 2")
 PRIV  <- c("SHELL C.A.P.S.A.","ESSO PETROLERA ARGENTINA S.R.L","AXION","PETROBRAS","Pampa Energia","PUMA","OIL COMBUSTIBLES S.A.")
 BLANCA<- c("BLANCA","SIN EMPRESA BANDERA")
@@ -2487,7 +2487,7 @@ ok <- file.copy(fs::path(DIR_TMP, c("figC1_within_between.png","figC2_ruta_urban
 cat("\nOutput\ntables 33-34 written to", as.character(DIR_TABLES),
     "\nfigures figC1/figC2 copied:", sum(ok), "/2 to", as.character(DIR_FIGURES), "\n")
 
-# Part 5. Pump price against crude and import parity ----
+# 5. Pump price against crude and import parity ----
 
 # National median pre-tax price of regular gasoline (nafta súper) in USD per litre
 # against Brent, the US Gulf Coast FOB gasoline price and import parity.
@@ -2522,7 +2522,7 @@ DIR_FIG   <- fs::path(DIR_OUTPUT, "Gráficos")
 DIR_TMP   <- fs::path(tempdir(), "figs_bloqueK"); fs::dir_create(DIR_TMP)
 FILE_BASE <- fs::path(DIR_INPUT, "eess_all_cleaned7_alternative_sinceappearance_con_crosswalk.rds")
 
-# Regime labels and colors as in 02_ypf_private_gap.R to 04_station_characteristics.R
+# Regime labels and colors as in sections 2 to 4
 PROD_SUPER <- "Nafta (súper) entre 92 y 95 Ron"
 REGS <- data.frame(x=as.Date(c("2012-05-01","2017-10-01","2019-08-01")),
                    lab=c("2012 · YPF estatal","2017 · desregulación","2019 · congelamiento"))

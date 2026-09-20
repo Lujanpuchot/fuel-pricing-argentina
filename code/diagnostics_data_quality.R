@@ -2,10 +2,11 @@
 # Diagnostics on the cleaned panel: distributions of volume and of the three
 # price variables, outlier counts, figures. The panel itself is not modified.
 #
-# This is where the thresholds used in 01_clean_panel.R come from: which volumes
-# are implausible for each product family, and which prices are corrupt rather
-# than merely extreme. It is not part of the pipeline and run_all.R does not call
-# it; run it after part 2 of 01_clean_panel.R to reproduce the evidence.
+# This is where the thresholds used in 02_clean_volume.R and 03_clean_prices.R
+# come from: which volumes are implausible for each product family, and which
+# prices are corrupt rather than merely extreme. It is not part of the pipeline
+# and run_all.R does not call it; run it after 02_clean_volume.R to reproduce
+# the evidence.
 #
 # Input:  eess_all_cleaned3_cut.rds
 # Output: figures (.png) and workbooks of summary tables (.xlsx) in the folders
