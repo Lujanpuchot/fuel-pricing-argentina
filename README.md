@@ -86,6 +86,7 @@ code/
   09_market_data.R            population, wages, prices and costs by market
   10_descriptives.R           tables and figures
   11_demand_sample.R          the product-market file the demand model needs
+  12_estimation_sample.R      joins the market and station variables onto it
   figure_readme.R             the figures on the front page, in English
   diagnostics_data_quality.R  how the cleaning thresholds were chosen
 data/                         the crosswalk, the geocoding reference tables and the 20-F extract
