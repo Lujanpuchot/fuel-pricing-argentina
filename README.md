@@ -1,6 +1,6 @@
 # Retail fuel pricing in Argentina
 
-Code for my M.A. thesis in Economics at Universidad de San Andrés, *When the State Competes: Ownership, Market Power, and Market Failure in Argentina's Retail Gasoline Market* (advisor: M. Florencia Gabrielli). Work in progress.
+Code for my M.A. thesis in Economics at Universidad de San Andrés, *When the State Competes: Ownership, Market Power, and Market Failure in Argentina's Retail Gasoline Market* (advisors: M. Florencia Gabrielli and Manuel Willington). Work in progress.
 
 YPF is the largest fuel retailer in Argentina. It was renationalized in 2012, and governments of different signs have leaned on it to hold pump prices down. The thesis asks how far YPF's prices depart from profit maximization, under which administrations, what that cost the firm in forgone margin, and how much of it reached consumers. I estimate a random-coefficients logit demand for gasoline, with diesel as a separate system, and a supply side in which YPF maximizes profit plus a weight λ on consumer surplus, comparing YPF with private brands that face the same costs in the same markets.
 
@@ -168,6 +168,10 @@ The panel, the geocoding, the market covariates and the descriptive and event ev
 Demand is what I am writing now. `13_estimation.py` is the specification, the instruments and the markups the supply side needs, and it has not been run on the full sample yet. Two things in it are open and are marked in the code. The price instrument is a refinery supply shock whose weights are not built, and without it the price coefficient leans on the differentiation instruments, which identify substitution better than they identify the level of the price response. And the cost of a litre to YPF is not observed, because a transfer price inside an integrated firm is an accounting entry rather than a market price, so the weight on consumer surplus is bounded before it is estimated: the code says how the bound is built and what would turn it into a point.
 
 Six decisions about the data are still open and are listed in [docs/open_issues.md](docs/open_issues.md), with the evidence behind each one. The one that blocks the quantity side is the group of outlets that report volume in litres.
+
+## On the code
+
+The research is mine: the questions, the model, the choices about the data and what to conclude from it. The scripts here were rewritten with Claude Code from the working versions I had in Spanish, which is also how the documentation was drafted. The rewrite was checked expression by expression against my originals; where it departs from them, it is because a path was generalized or a bug was fixed, and the commit that made the change says which.
 
 ## Use
 
