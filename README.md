@@ -24,7 +24,7 @@ Ownership and the pricing regime changed on different dates, which is what lets 
 
 One parameter carries all of it. Write YPF's objective as profit plus $\lambda$ times consumer surplus; its margin is then $(1-\lambda)$ times the margin a pure profit maximizer would charge with the same demand and the same cost. Five questions follow, and the thesis is the attempt to answer them:
 
-1. **Does YPF give up margin, and how much?** Private brands in the same markets are the benchmark, and also the placebo: their weight should be zero.
+1. **Does YPF give up margin, and how much?** Private brands in the same markets are the benchmark.
 2. **Is it the government or is it ownership?** $\lambda$ is estimated for each administration, and the two changed on different dates.
 3. **Where does it happen?** Departments where YPF is the only brand, against those where it competes.
 4. **Through which channel?** The pump price at the stations YPF prices itself, or the wholesale price charged to the dealers who price their own.
