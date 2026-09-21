@@ -23,5 +23,11 @@ source("code/08_station_variables.R") # rivals, distances, highway and border fl
 source("code/09_market_data.R")       # population, wages, prices and costs by market
 source("code/10_descriptives.R")      # tables and figures
 
+source("code/11_demand_sample.R")     # the product-market file the demand model needs
+source("code/12_estimation_sample.R") # market and station variables joined onto it
+
 # code/diagnostics_data_quality.R is not part of the pipeline: it documents how
 # the cleaning thresholds were chosen and does not modify the panel.
+#
+# code/13_estimation.py is the demand estimation and runs in Python, on the file
+# 12_estimation_sample.R writes.

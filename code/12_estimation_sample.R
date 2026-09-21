@@ -98,8 +98,6 @@ if (SHARED_CODE == "collapse" && nrow(afectados) > 0) {
     market_size  = market_size[1],
     outlets      = sum(outlets),
     shares       = sum(quantity) / market_size[1],
-    n_productos_mercado = .N,
-    n_otras_marcas      = uniqueN(firm_ids) - 1,
     provincia = provincia[1], departamento = paste(sort(unique(departamento)), collapse = " + "),
     trimestre = trimestre[1], anio = anio[1],
     codigo_departamento_indec = codigo_departamento_indec[1]
@@ -108,6 +106,13 @@ if (SHARED_CODE == "collapse" && nrow(afectados) > 0) {
   n0 <- nrow(d)
   cat("  collapsed to", uniqueN(d$market_ids), "markets,", n0, "rows\n")
 }
+
+# The counts of what else a market offers are instruments, and merging two
+# departments into one market changes them, so they are rebuilt here on the
+# market as it now stands rather than carried over from 11_demand_sample.R.
+d[, n_productos_mercado := .N, by = market_ids]
+d[, n_otras_marcas := uniqueN(firm_ids) - 1, by = market_ids]
+d[, n_mismo_grado := .N - 1, by = .(market_ids, grade)]
 
 # 2. Market covariates, on the INDEC code ----
 

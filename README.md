@@ -72,7 +72,7 @@ Raw and intermediate files add up to about 10 GB and are not part of the reposit
 ## Repository layout
 
 ```
-run_all.R                     runs the ten scripts below, in order
+run_all.R                     runs the numbered R scripts below, in order
 code/
   00_config.R                 where the data are
   01_build_panel.R            joins the six raw files
@@ -87,6 +87,7 @@ code/
   10_descriptives.R           tables and figures
   11_demand_sample.R          the product-market file the demand model needs
   12_estimation_sample.R      joins the market and station variables onto it
+  13_estimation.py            demand in PyBLP, and the markups the supply step needs
   figure_readme.R             the figures on the front page, in English
   diagnostics_data_quality.R  how the cleaning thresholds were chosen
 data/                         the crosswalk, the geocoding reference tables and the 20-F extract
@@ -162,7 +163,9 @@ Variable names follow the source data and are in Spanish. Comments are in Englis
 
 ## Status
 
-The panel, the geocoding, the market covariates and the descriptive and event evidence are done, and this repository is that work. Demand comes next: `11_demand_sample.R` assembles the product-market file the demand model is estimated on, and the estimation itself runs in PyBLP. The supply regressions follow from it, since every margin needs the markup the demand estimates imply.
+The panel, the geocoding, the market covariates and the descriptive and event evidence are done, and this repository is that work. The estimation sample is done too: `11_demand_sample.R` assembles the product-market file and `12_estimation_sample.R` joins the market and station variables onto it, 222,147 products over 35,481 markets.
+
+Demand is what I am writing now. `13_estimation.py` is the specification, the instruments and the markups the supply side needs, and it has not been run on the full sample yet. Two things in it are open and are marked in the code. The price instrument is a refinery supply shock whose weights are not built, and without it the price coefficient leans on the differentiation instruments, which identify substitution better than they identify the level of the price response. And the cost of a litre to YPF is not observed, because a transfer price inside an integrated firm is an accounting entry rather than a market price, so the weight on consumer surplus is bounded before it is estimated: the code says how the bound is built and what would turn it into a point.
 
 Six decisions about the data are still open and are listed in [docs/open_issues.md](docs/open_issues.md), with the evidence behind each one. The one that blocks the quantity side is the group of outlets that report volume in litres.
 
