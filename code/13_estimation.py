@@ -112,19 +112,32 @@ for i in range(instruments.shape[1]):
 
 # 2. Demand --------------------------------------------------------------------
 
-# The linear part holds price and a full set of product fixed effects, so a brand
-# and grade is compared with itself across markets and quarters rather than with
-# another brand. Quarter effects take out everything national: the exchange rate,
-# the crude price, the tax schedule and the months of price agreements.
+# This is the specification in docs/research_proposal.md. The linear part holds
+# price, the number of outlets the brand runs in the department, which is how
+# much of a brand a driver actually meets, and a full set of product fixed
+# effects, so a brand and grade is compared with itself across markets and
+# quarters rather than with another brand. Quarter effects take out everything
+# national: the exchange rate, the crude price, the tax schedule and the months
+# of price agreements.
 #
-# The random coefficients are on the constant and on price. The one on the
-# constant is what separates the brands people are willing to drive past from the
-# outside option; the one on price is what makes substitution depend on how much
-# a household cares about the price rather than on shares alone, which is the
-# whole reason for not using plain logit here. Both are needed for the markups in
-# section 3 to mean anything, since a logit markup is a function of the share.
-X1 = pyblp.Formulation("1 + prices", absorb="C(product_ids) + C(trimestre)")
-X2 = pyblp.Formulation("1 + prices")
+# The random coefficients are on price and on the premium grade. The one on price
+# is what makes substitution depend on how much a household minds paying more
+# rather than on shares alone, which is the whole reason for not using plain
+# logit; the one on premium lets the people who buy the expensive grade be the
+# same people across brands, so a premium product loses customers to the other
+# premium product before it loses them to regular. Both are what makes the
+# markups in section 3 mean anything, since a logit markup is only a function of
+# the share.
+products["premium"] = products["grade"].str.contains("premium").astype(int)
+
+X1 = pyblp.Formulation("0 + prices + outlets", absorb="C(product_ids) + C(trimestre)")
+X2 = pyblp.Formulation("0 + prices + premium")
+
+# The proposal also lets price sensitivity vary with local income and by region.
+# That needs agent data, a draw of households per market rather than one number,
+# and what the department data give is a mean wage. Until there is a distribution
+# to draw from, the variation in price sensitivity is the random coefficient
+# alone, and income enters nothing.
 
 problem = pyblp.Problem(
     (X1, X2),
