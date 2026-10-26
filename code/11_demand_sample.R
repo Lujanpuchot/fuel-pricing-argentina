@@ -6,12 +6,13 @@
 # Input:  the analysis panel with the department column, the market covariates
 #         written by 09_market_data.R, and the station variables of
 #         08_station_variables.R
-# Output: demanda_blp_sample.csv in DIR_INTERIM, one row per market and product
+# Output: demanda_blp_sample_<system>.csv in DIR_INTERIM, one row per market
+#         and product
 #
 # A market is a department in a quarter. A product is a bandera (brand) crossed
 # with a grade, with the unbranded outlets pooled into one composite brand.
-# Gasoline and diesel are separate systems and the argument of the script picks
-# one; gasoline is the one the main result rests on.
+# Gasoline and diesel are separate systems and PRODUCT_SYSTEM picks one;
+# gasoline is the one the main result rests on.
 #
 # Three choices this script does not make on its own, because they are open and
 # are argued in docs/open_issues.md:
@@ -84,22 +85,32 @@ pm <- b[, .(
 # 3. Market size and shares ----
 
 # Market size must not contain the quantity of the quarter it scales, or the
-# share is mechanically related to its own denominator. The three candidates
-# differ in how much of the outside option they allow.
+# share is mechanically related to its own denominator. Both rules use the
+# same quarter of other years only, which also keeps seasonality out of the
+# outside share.
 market_size <- function(pm, rule) {
   tot <- pm[, .(q_mercado = sum(q)), by = .(provincia, departamento, trimestre, anio)]
-  setorder(tot, provincia, departamento, trimestre)
-  switch(rule,
-    # 1.5 times the largest quarter of the adjacent years, the definition the
-    # roadmap starts from
-    max_adyacente = tot[, M := 1.5 * max(q_mercado), by = .(provincia, departamento, anio)],
-    # the same, using only years already observed, so nothing looks ahead
-    max_pasado    = tot[, M := 1.5 * cummax(q_mercado), by = .(provincia, departamento)],
+  tot[, `:=`(y = as.integer(anio), k = sub(".*T", "", trimestre))]
+
+  # quantity of the same department and quarter s years earlier (s < 0: later)
+  same_quarter <- function(s) {
+    tot[.(tot$provincia, tot$departamento, tot$k, tot$y - s),
+        on = .(provincia, departamento, k, y), x.q_mercado]
+  }
+
+  q_ref <- switch(rule,
+    # the larger of the year before and the year after. Looking ahead is a
+    # capacity bound, not a forecast: with the past alone, a department that
+    # grows fast would show a small outside share only because it grew
+    max_adyacente = pmax(same_quarter(1), same_quarter(-1), na.rm = TRUE),
+    # the two previous years, so nothing looks ahead; loses each first year
+    max_pasado    = pmax(same_quarter(1), same_quarter(2), na.rm = TRUE),
     # a physical potential from population and car ownership, which needs the
     # covariates of 09_market_data.R and is not built here yet
     potencial     = stop("the physical market size is not built yet (see docs/open_issues.md)"),
     stop("unknown market size rule: ", rule)
   )
+  tot[, M := 1.5 * q_ref]
   tot[, .(provincia, departamento, trimestre, M)]
 }
 
@@ -107,20 +118,18 @@ M <- market_size(pm, MARKET_SIZE)
 pm <- merge(pm, M, by = c("provincia", "departamento", "trimestre"))
 
 pm[, share := q / M]
-pm[, share_total := sum(share), by = mercado]
-pm[, share_0 := 1 - share_total]
+pm[, share_0 := 1 - sum(share), by = mercado]
 
-cat("cells with a non-positive outside share:",
-    pm[share_0 <= 0, uniqueN(mercado)], "of", uniqueN(pm$mercado), "markets\n")
-cat("the analysis plan asks for fewer than 2% of cells with an outside share below 0.05\n")
-
-# On the sample as it stands the criterion is met everywhere, but it is met by
-# construction rather than by the data. With M = 1.5 times the largest quarter,
-# a market in its own largest quarter has an outside share of exactly 1/3, and
-# no market can fall below that. The criterion was written to rule out the
-# earlier definition, which left a quarter of the cells with no outside good at
-# all; it does not discriminate among the candidates here. What separates them
-# is what they imply about the elasticity, which only the estimation shows.
+# A market with no reference quarter has no size, and one that sold more than
+# its size cannot be inverted. Both leave the sample whole.
+n_mk   <- uniqueN(pm$mercado)
+no_ref <- pm[is.na(M), uniqueN(mercado)]
+over   <- pm[!is.na(M) & share_0 <= 0, uniqueN(mercado)]
+pm <- pm[!is.na(M) & share_0 > 0]
+cat("markets dropped:", no_ref, "with no reference quarter,", over,
+    "with a non-positive outside share, of", n_mk, "\n")
+cat("markets with an outside share below 0.05:", pm[share_0 < 0.05, uniqueN(mercado)],
+    "of", uniqueN(pm$mercado), "(the analysis plan asks for fewer than 2%)\n")
 
 # 4. Instruments ----
 
@@ -145,12 +154,13 @@ pm[, n_mismo_grado := .N - 1, by = .(mercado, producto)]
 
 # 4.2 The refinery shock, from the distance to each refinery and the runs
 # reported by the Energy Secretariat. Both pieces exist: d_refineria_km in
-# variables_espaciales_estacion.csv, and covar_sesco_refinacion.csv. Writing the
-# weights is the next step and is deliberately left here rather than improvised.
+# variables_espaciales_estacion.csv, and covar_sesco_refinacion.csv. The
+# weights are not written yet; 13_estimation.py picks the shock up from
+# refinery_shock_<system>.csv when the file exists.
 FILE_REF <- fs::path(DIR_INT, "variables_espaciales_estacion.csv")
 FILE_RUN <- fs::path(DIR_COV, "covar_sesco_refinacion.csv")
 if (fs::file_exists(FILE_REF) && fs::file_exists(FILE_RUN)) {
-  cat("refinery distance and refinery runs are both present; the shock is built in the next commit\n")
+  cat("refinery distance and refinery runs found; the shock weights are not built yet\n")
 } else {
   cat("refinery distance or refinery runs missing: the shock cannot be built here\n")
 }
