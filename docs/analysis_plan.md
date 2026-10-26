@@ -85,3 +85,7 @@ The main hypothesis fails if YPF's excess weight is zero in every period while t
 ## Departures from the plan
 
 Any departure (another market-size definition, a changed sample, an instrument added or dropped, a reclassified month) will be listed in a dated section at the end of this file, with the reason and, where computable, the results under the original choice.
+
+### 26 October 2026
+
+The demand sample drops every market with a product priced below half or above twice the median of its grade and quarter: 457 of 34,484 gasoline markets, 1.3%. It is the relative cutoff of open issue 3, applied when demand is estimated rather than in the panel, and `--price-band` in `13_estimation.py` sets it. There are no results under the original sample to compare with.

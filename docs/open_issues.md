@@ -28,6 +28,8 @@ Candidate rule: once the rescaling above is applied, decide the cap on physical 
 
 Candidate rule: add a cutoff relative to the year, as a multiple of the median of the product in that year, and report how many records it removes per year.
 
+Until the panel has it, `13_estimation.py` applies a version at the estimation stage: a market leaves the demand sample whole if any of its products is priced below half or above twice the median of its grade in that quarter. That is 457 of 34,484 gasoline markets.
+
 ### Duplicate records that are not duplicates
 
 After `04_deduplicate.R`, 65,155 records still share an outlet-product-channel-month key. Around three quarters are the taxed and the tax-exempt line of the same sale, which the fuel tax exemption in Patagonia makes common there; most of the rest are copies from the two source files that overlap in 2013. About a fifth are genuinely conflicting reports, almost all diesel in 2009-2011.
