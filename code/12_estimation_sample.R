@@ -87,21 +87,25 @@ afectados <- d[codigo_departamento_indec %in% compartidos]
 cat("  markets on a shared INDEC code:", uniqueN(afectados$market_ids), "\n")
 
 if (SHARED_CODE == "collapse" && nrow(afectados) > 0) {
-  # One market per code and quarter: quantities add, prices are weighted by
-  # quantity, and the market size is taken once instead of twice.
+  # One market per code and quarter: quantities add and prices are weighted by
+  # quantity. Each department's size comes from its own sales, so the size of
+  # the merged market is the sum over its departments.
   d[, mercado_key := fifelse(codigo_departamento_indec %in% compartidos,
                              paste(codigo_departamento_indec, trimestre, sep = "|"),
                              market_ids)]
+  tam <- unique(d[, .(mercado_key, market_ids, market_size)])[
+    , .(market_size = sum(market_size)), by = mercado_key]
   d <- d[, .(
     prices       = sum(prices * quantity) / sum(quantity),
     quantity     = sum(quantity),
-    market_size  = market_size[1],
     outlets      = sum(outlets),
-    shares       = sum(quantity) / market_size[1],
     provincia = provincia[1], departamento = paste(sort(unique(departamento)), collapse = " + "),
     trimestre = trimestre[1], anio = anio[1],
     codigo_departamento_indec = codigo_departamento_indec[1]
-  ), by = .(market_ids = mercado_key, product_ids, firm_ids, grade)]
+  ), by = .(mercado_key, product_ids, firm_ids, grade)]
+  d <- merge(d, tam, by = "mercado_key", sort = FALSE)
+  setnames(d, "mercado_key", "market_ids")
+  d[, shares := quantity / market_size]
   d[, outside_share := 1 - sum(shares), by = market_ids]
   n0 <- nrow(d)
   cat("  collapsed to", uniqueN(d$market_ids), "markets,", n0, "rows\n")
