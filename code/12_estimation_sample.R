@@ -165,6 +165,20 @@ if (fs::file_exists(pan)) {
   link <- merge(link, unique(vp[, c("nro_inscripcion", "anio", ..cols)]),
                 by.x = c("nro_inscripcion", "anio_int"), by.y = c("nro_inscripcion", "anio"),
                 all.x = TRUE)
+  # 08_station_variables.R looks for rivals among the outlets with an exact
+  # coordinate, within 50 km, and leaves the distance empty when there is none.
+  # For an outlet in that panel (it has an exact coordinate itself, so
+  # n_riv_5km is there) this is a distance of at least 50 km to the nearest
+  # such rival, not a missing one: top-code it, so isolated outlets enter the
+  # product average and their markets are not dropped for a missing instrument.
+  what <- c(d_rival_min = "no rival", d_rival_otra_marca = "no rival of another brand")
+  if ("n_riv_5km" %in% cols) {
+    for (v in intersect(names(what), cols)) {
+      cat(v, ": ", link[!is.na(n_riv_5km) & is.na(get(v)), .N], " rows with ", what[[v]],
+          " within 50 km, set to 50\n", sep = "")
+      link[!is.na(n_riv_5km) & is.na(get(v)), (v) := 50]
+    }
+  }
 }
 
 vars_est <- setdiff(names(link), c("nro_inscripcion", "provincia", "departamento",

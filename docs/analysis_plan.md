@@ -89,3 +89,9 @@ Any departure (another market-size definition, a changed sample, an instrument a
 ### 26 October 2026
 
 The demand sample drops every market with a product priced below half or above twice the median of its grade and quarter: 457 of 34,484 gasoline markets, 1.3%. It is the relative cutoff of open issue 3, applied when demand is estimated rather than in the panel, and `--price-band` in `13_estimation.py` sets it. There are no results under the original sample to compare with.
+
+### 27 October 2026
+
+Besides the rival counts, the demand instruments include differentiation instruments built from each product's distance to the nearest rival and number of rivals within 5 km. They need both variables for every product of a market, so a market in which some product has no outlet with an exact coordinate is dropped: 3,828 of the 34,027 gasoline markets that pass the price screen, 11.2%. `--no-spatial` estimates without them and keeps those markets.
+
+Until this date the distance was also missing when the nearest rival with an exact coordinate was more than 50 km away, the search radius of `08_station_variables.R`, and those markets were dropped as well. `12_estimation_sample.R` now top-codes that distance at 50 km. This brings back 1,979 markets, 1,349 of them served only by YPF, the captive markets of hypothesis 3. It also raises the distance of 1,655 products in 911 markets that were already in the sample, where an isolated outlet now enters the product average. There are no results under the earlier sample to compare with.
