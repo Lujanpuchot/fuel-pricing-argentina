@@ -113,12 +113,28 @@ class TestFirstStage(unittest.TestCase):
         weak = dd.first_stage(self.simulate(0.0), excluded=["z1", "z2"], **args)
         self.assertGreater(strong["effective_f"], 100)
         self.assertLess(weak["effective_f"], 10)
+        # price was simulated as z1 + noise, so the coefficient is near one
+        self.assertAlmostEqual(strong["coefficients"]["z1"], 1.0, delta=0.1)
+        self.assertLess(abs(strong["coefficients"]["z2"]), 3 * strong["standard_errors"]["z2"])
 
     def test_absorbed_instrument_is_dropped(self):
-        out = dd.first_stage(self.simulate(1.0), "prices", ["outlets"], ["z1", "z_fixed"],
+        out = dd.first_stage(self.simulate(1.0), "prices", ["outlets"], ["z_fixed", "z1"],
                              ["product_ids", "trimestre"], "clustering_ids")
         self.assertEqual(out["instruments_dropped"], ["z_fixed"])
         self.assertEqual(out["instruments_used"], 1)
+        self.assertEqual(list(out["coefficients"]), ["z1"])
+        self.assertAlmostEqual(out["coefficients"]["z1"], 1.0, delta=0.1)
+
+    def test_quarter_and_repeated_instruments_are_dropped(self):
+        d = self.simulate(1.0)
+        d = d[~((d["product_ids"] < 10) & (d["trimestre"] < 4))]  # unbalanced panel
+        # a national series, absorbed only by the second set of fixed effects
+        d["z_quarter"] = 50 + 10 * np.sin(d["trimestre"].to_numpy(float))
+        d["z1_again"] = 2 * d["z1"]
+        out = dd.first_stage(d, "prices", ["outlets"], ["z1", "z_quarter", "z1_again", "z2"],
+                             ["product_ids", "trimestre"], "clustering_ids")
+        self.assertEqual(out["instruments_dropped"], ["z_quarter", "z1_again"])
+        self.assertEqual(list(out["coefficients"]), ["z1", "z2"])
 
 
 if __name__ == "__main__":

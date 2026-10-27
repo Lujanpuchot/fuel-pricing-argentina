@@ -156,7 +156,8 @@ def first_stage(products: pd.DataFrame, endog: str, exog: list[str],
     partialled out. Reports the effective F of Montiel Olea and Pflueger (2013)
     and the robust Wald F, both with a cluster-robust variance and without
     small-sample corrections. With homoskedastic errors both equal the usual
-    first-stage F.
+    first-stage F. The coefficients and their standard errors are there to
+    read the sign of each instrument.
     """
     m = demean(products[[endog] + exog + excluded].to_numpy(float),
                [products[g].to_numpy() for g in absorb])
@@ -166,8 +167,15 @@ def first_stage(products: pd.DataFrame, endog: str, exog: list[str],
         resid = np.c_[y, z] - x @ coef
         y, z = resid[:, 0], resid[:, 1:]
 
-    # instruments with no variation left after the fixed effects carry nothing
-    keep = z.std(axis=0) > 1e-12 * (1 + np.abs(z).max())
+    # An instrument that the fixed effects absorb, or that repeats a combination
+    # of the ones before it, carries nothing and is left out. Variation is
+    # measured against the instrument's own spread before demeaning, because
+    # alternating projections leave a residual of the order of the tolerance.
+    before = products[excluded].to_numpy(float).std(axis=0)
+    keep = []
+    for j in np.flatnonzero(z.std(axis=0) > 1e-6 * before):
+        if np.linalg.matrix_rank(z[:, keep + [j]]) == len(keep) + 1:
+            keep.append(j)
     z = z[:, keep]
 
     zz = z.T @ z
@@ -177,10 +185,13 @@ def first_stage(products: pd.DataFrame, endog: str, exog: list[str],
     scores = np.column_stack([np.bincount(g, weights=z[:, j] * u) for j in range(z.shape[1])])
     bread = np.linalg.inv(zz)
     v = bread @ (scores.T @ scores) @ bread
+    used = [excluded[j] for j in keep]
     return {
         "effective_f": float(pi @ zz @ pi / np.trace(v @ zz)),
         "robust_wald_f": float(pi @ np.linalg.solve(v, pi) / len(pi)),
-        "instruments_used": int(keep.sum()),
-        "instruments_dropped": [e for e, k in zip(excluded, keep) if not k],
+        "coefficients": dict(zip(used, pi.tolist())),
+        "standard_errors": dict(zip(used, np.sqrt(np.diag(v)).tolist())),
+        "instruments_used": len(used),
+        "instruments_dropped": [e for e in excluded if e not in used],
         "clusters": int(g.max() + 1),
     }
