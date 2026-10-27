@@ -14,7 +14,9 @@ Output, in <interim>/blp_<system>/ unless --out says otherwise:
                       and, with --optimal-iv, the re-estimate
     diagnostics.json  sample, instruments, first stage, convergence, elasticities
     markups.csv       one row per product and market: price, share, own
-                      elasticity, diversion to the outside good and mu_star
+                      elasticity, diversion to the outside good and mu_star;
+                      price and mu_star in pesos of the base quarter per
+                      litre, price_nominal in current pesos
     summary.txt       PyBLP's own printout of each problem and its results
     results.pkl       the final results, to reload without solving again
 
@@ -34,6 +36,7 @@ import argparse
 import contextlib
 import json
 import logging
+import math
 from pathlib import Path
 
 import numpy as np
@@ -64,12 +67,19 @@ X1 = pyblp.Formulation("0 + prices + outlets", absorb="C(product_ids) + C(trimes
 X2 = pyblp.Formulation("0 + prices + premium")
 
 # Starting values for sigma (price, premium). The GMM objective is not convex
-# in sigma; the problem is solved from each and the lowest objective among the
-# runs that converged is kept.
+# in sigma, so the problem is solved from each; see solve_rc for how one is
+# picked.
 STARTS = [(0.5, 0.2), (1.5, 0.5), (3.0, 1.0)]
 
 OPTIMIZATION = pyblp.Optimization("l-bfgs-b", {"gtol": 1e-6})
 SOLVE = dict(optimization=OPTIMIZATION, W_type="clustered", se_type="clustered")
+
+# L-BFGS-B also reports success when a line search steps into a region where
+# the contraction fails and it falls back to the last point, which need not be
+# a minimum. A run counts as converged only if the projected gradient is small
+# where it stopped. PyBLP multiplies the objective, and so the gradient, by the
+# number of observations, so the bound is per observation.
+GRADIENT_TOL = 1e-6
 
 # Rival counts by grade and in the market. They move with entry, which is
 # decided years before, and not with the demand shock of the quarter.
@@ -77,9 +87,9 @@ COUNTS = ["n_otras_marcas", "n_productos_mercado", "n_mismo_grado"]
 
 # Station-level distances, averaged over the outlets of each product. They
 # vary between brands inside a market, which is what differentiation
-# instruments are built from. They are missing where outlets were geocoded to
-# a locality centroid, and a market with a gap leaves whole: about a sixth of
-# the markets, mostly small and concentrated ones. --no-spatial keeps them.
+# instruments are built from. They are missing when no outlet of the product
+# has an exact coordinate, and a market with a gap leaves whole: 3,828 of the
+# 34,027 gasoline markets that pass the price screen. --no-spatial keeps them.
 SPATIAL = ["d_rival_min", "n_riv_5km"]
 
 
@@ -163,7 +173,10 @@ def add_instruments(products: pd.DataFrame, interim: Path, system: str,
         local = pyblp.build_differentiation_instruments(
             pyblp.Formulation("0 + " + " + ".join(SPATIAL)), products)
         blocks.append(local)
-        names += [f"differentiation_{i + 1}" for i in range(local.shape[1])]
+        # PyBLP's column order: the own-firm count of close products for each
+        # characteristic, then the rival count
+        names += [f"{who}_close_{c}" for who in ("own", "rival") for c in SPATIAL]
+        assert len(names) == sum(b.shape[1] for b in blocks)
 
     z = np.column_stack(blocks)
     varies = z.std(axis=0) > 0
@@ -185,28 +198,68 @@ def solve_logit(products: pd.DataFrame):
     return problem, problem.solve(W_type="clustered", se_type="clustered")
 
 
+def stationary(results) -> bool:
+    if results.theta.size == 0:  # nothing left to optimize over
+        return True
+    gradient = float(results.projected_gradient_norm) / results.problem.N
+    return bool(results.converged) and gradient < GRADIENT_TOL
+
+
 def solve_rc(products: pd.DataFrame, size: int):
+    """Random-coefficients logit from each of STARTS, two-step from the best.
+
+    The starts are compared on the first GMM step, whose weighting matrix
+    depends only on the instruments. Second-step objectives are not comparable:
+    each uses a weighting matrix built from its own first step.
+    """
     problem = pyblp.Problem((X1, X2), products,
                             integration=pyblp.Integration("product", size=size))
     runs = []
     for start in STARTS:
-        results = problem.solve(sigma=np.diag(start), **SOLVE)
-        runs.append(results)
-        log.info("start %s: objective %.6g, converged %s, sigma %s", start,
-                 float(results.objective), results.converged,
-                 np.round(np.diag(results.sigma), 4))
-    converged = [r for r in runs if r.converged]
-    if not converged:
-        log.warning("no start converged; keeping the lowest objective anyway")
-    best = min(converged or runs, key=lambda r: float(r.objective))
-    return problem, best, runs
+        r = problem.solve(sigma=np.diag(start), method="1s", **SOLVE)
+        runs.append(r)
+        log.info("start %s: objective %.6g, gradient per observation %.2g, sigma %s", start,
+                 float(r.objective), float(r.projected_gradient_norm) / problem.N,
+                 np.round(np.diag(r.sigma), 4))
+    usable = [i for i, r in enumerate(runs) if stationary(r)]
+    if not usable:
+        log.warning("no start reached a stationary point; going on from the lowest objective")
+    best = min(usable or range(len(runs)), key=lambda i: float(runs[i].objective))
+    # At sigma = 0 the gradient is zero too, so a run that collapsed there
+    # always looks stationary. Say so if a run that did not stop cleanly got lower.
+    if any(float(r.objective) < float(runs[best].objective) for r in runs):
+        log.warning("a start that did not reach a stationary point has a lower objective "
+                    "than the one kept; try other starting values")
+    results = problem.solve(sigma=np.diag(STARTS[best]), **SOLVE)
+    return problem, results, runs, best
 
 
 def solve_optimal(results):
     """Re-solve with the approximation to the optimal instruments of
-    Conlon and Gortmaker (2020), starting from the first estimate."""
-    problem = results.compute_optimal_instruments(method="approximate").to_problem()
-    return problem, problem.solve(results.sigma, method="1s", **SOLVE)
+    Conlon and Gortmaker (2020), starting from the first estimate.
+
+    A random coefficient estimated at or next to its lower bound of zero has an
+    optimal instrument that is zero, or nearly, everywhere, and with it the
+    weighting matrix cannot be inverted. Below 1e-4, which is zero for any
+    purpose with prices in thousands of pesos and a 0-1 premium dummy, sigma is
+    held at zero and its column left out. drop_indices replaces PyBLP's
+    default, which drops the columns of exogenous linear coefficients in theta;
+    there are none, because the linear coefficients are concentrated out.
+    """
+    optimal = results.compute_optimal_instruments(method="approximate")
+    sigma = results.sigma.copy()
+    labels = list(results.theta_labels)
+    drop = []
+    for k, name in enumerate(results.sigma_labels):
+        label = f"{name} x {name}"
+        if label in labels and abs(sigma[k, k]) < 1e-4:
+            log.warning("sigma on %s is at zero (%.2g) and is held there", name, sigma[k, k])
+            sigma[k, k] = 0.0
+            drop.append(labels.index(label))
+    if len(drop) == len(labels):
+        log.warning("every sigma is held at zero: the re-estimate is a logit with optimal instruments")
+    problem = optimal.to_problem(drop_indices=drop or None)
+    return problem, problem.solve(sigma, method="1s", **SOLVE)
 
 
 # Output --------------------------------------------------------------------------
@@ -223,13 +276,25 @@ def own_elasticities(results) -> np.ndarray:
     return results.extract_diagonals(results.compute_elasticities()).ravel()
 
 
+def upward_sloping(results) -> float:
+    """Share of consumers whose price coefficient, beta + sigma * v with v
+    standard normal, is positive."""
+    b = float(results.beta[list(results.beta_labels).index("prices"), 0])
+    k = list(results.sigma_labels).index("prices")
+    s = abs(float(results.sigma[k, k]))
+    return float(b > 0) if s == 0 else 0.5 * (1 + math.erf(b / (s * math.sqrt(2))))
+
+
 def convergence(results) -> dict:
+    gradient = float(results.projected_gradient_norm)
     return {
-        "converged": bool(results.converged),
+        "converged": bool(results.cumulative_converged),
+        "stationary": stationary(results),
         "objective": float(results.objective),
-        "projected_gradient_norm": float(results.projected_gradient_norm),
+        "projected_gradient_norm": gradient if np.isfinite(gradient) else None,
         "reduced_hessian_eigenvalues": np.asarray(results.reduced_hessian_eigenvalues).ravel().tolist(),
-        "optimization_iterations": int(results.optimization_iterations),
+        "optimization_iterations": int(results.cumulative_optimization_iterations),
+        "markets_contraction_failed": int((results.fp_converged[:, -1] == 0).sum()),
     }
 
 
@@ -252,6 +317,10 @@ def main(argv=None) -> None:
     excluded = [f"demand_instruments{i}" for i in range(len(instruments))]
     first = dd.first_stage(products, "prices", ["outlets"], excluded,
                            absorb=["product_ids", "trimestre"], cluster="clustering_ids")
+    names = dict(zip(excluded, instruments))
+    for key in ("coefficients", "standard_errors"):
+        first[key] = {names[k]: v for k, v in first[key].items()}
+    first["instruments_dropped"] = [names[k] for k in first["instruments_dropped"]]
     log.info("first stage: effective F %.1f over %d instruments",
              first["effective_f"], first["instruments_used"])
 
@@ -260,7 +329,7 @@ def main(argv=None) -> None:
         logit_problem, logit = solve_logit(products)
         logit_own = own_elasticities(logit)
 
-        problem, results, runs = solve_rc(products, args.integration_size)
+        problem, results, runs, best = solve_rc(products, args.integration_size)
         summary = [str(logit_problem), str(logit), str(problem), str(results)]
         tables = [coefficients(logit, "logit"), coefficients(results, "rc")]
         final = "rc"
@@ -273,8 +342,22 @@ def main(argv=None) -> None:
 
         own = own_elasticities(results)
         outside = results.extract_diagonals(results.compute_diversion_ratios()).ravel()
-        aggregate = results.compute_aggregate_elasticities(factor=0.1).ravel()
-        mu_star = results.compute_eta().ravel()
+        # PyBLP gives the change in the inside share per unit of the factor;
+        # divided by the inside share it is the elasticity of total demand,
+        # an arc elasticity for a 10% rise in every price of the market.
+        inside = products.groupby("market_ids")["shares"].sum()
+        inside = inside.reindex(results.problem.unique_market_ids.ravel()).to_numpy()
+        aggregate = results.compute_aggregate_elasticities(factor=0.1).ravel() / inside
+        # Bertrand markup in price units, p - c, with c backed out of the
+        # first-order conditions under the ownership in firm_ids
+        mu_star = products["prices"].to_numpy() - results.compute_costs().ravel()
+
+    upward = upward_sloping(results)
+    nonpositive = float(np.mean(mu_star <= 0))
+    if logit.beta[0, 0] >= 0 or nonpositive > 0:
+        log.warning("logit price coefficient %.3g, %.1f%% of consumers with demand sloping up, "
+                    "%.1f%% of markups not positive: the markups cannot be used as they are",
+                    logit.beta[0, 0], 100 * upward, 100 * nonpositive)
 
     # A price-setting firm never sits on the inelastic part of its demand, so
     # own elasticities above -1 point to a problem with the estimates.
@@ -289,8 +372,11 @@ def main(argv=None) -> None:
             "share_inelastic": float(np.mean(logit_own > -1)),
         },
         "starts": [{"sigma0": list(s), "sigma": np.diag(r.sigma).tolist(),
-                    "objective": float(r.objective), "converged": bool(r.converged)}
+                    "objective_first_step": float(r.objective),
+                    "projected_gradient_norm": float(r.projected_gradient_norm),
+                    "stationary": stationary(r)}
                    for s, r in zip(STARTS, runs)],
+        "chosen_start": list(STARTS[best]),
         "final_model": final,
         "convergence": convergence(results),
         "elasticities": {
@@ -299,6 +385,11 @@ def main(argv=None) -> None:
             "share_inelastic": float(np.mean(own > -1)),
             "median_aggregate_10pct": float(np.median(aggregate)),
             "median_outside_diversion": float(np.median(outside)),
+        },
+        "markups": {
+            "median_mu_star": float(np.median(mu_star) * PRICE_SCALE),
+            "share_not_positive": nonpositive,
+            "share_consumers_upward_sloping": upward,
         },
     }
     log.info("median own elasticity %.2f (logit %.2f); %.1f%% of products inelastic",
