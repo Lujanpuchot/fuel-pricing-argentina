@@ -87,21 +87,25 @@ afectados <- d[codigo_departamento_indec %in% compartidos]
 cat("  markets on a shared INDEC code:", uniqueN(afectados$market_ids), "\n")
 
 if (SHARED_CODE == "collapse" && nrow(afectados) > 0) {
-  # One market per code and quarter: quantities add, prices are weighted by
-  # quantity, and the market size is taken once instead of twice.
+  # One market per code and quarter: quantities add and prices are weighted by
+  # quantity. Each department's size comes from its own sales, so the size of
+  # the merged market is the sum over its departments.
   d[, mercado_key := fifelse(codigo_departamento_indec %in% compartidos,
                              paste(codigo_departamento_indec, trimestre, sep = "|"),
                              market_ids)]
+  tam <- unique(d[, .(mercado_key, market_ids, market_size)])[
+    , .(market_size = sum(market_size)), by = mercado_key]
   d <- d[, .(
     prices       = sum(prices * quantity) / sum(quantity),
     quantity     = sum(quantity),
-    market_size  = market_size[1],
     outlets      = sum(outlets),
-    shares       = sum(quantity) / market_size[1],
     provincia = provincia[1], departamento = paste(sort(unique(departamento)), collapse = " + "),
     trimestre = trimestre[1], anio = anio[1],
     codigo_departamento_indec = codigo_departamento_indec[1]
-  ), by = .(market_ids = mercado_key, product_ids, firm_ids, grade)]
+  ), by = .(mercado_key, product_ids, firm_ids, grade)]
+  d <- merge(d, tam, by = "mercado_key", sort = FALSE)
+  setnames(d, "mercado_key", "market_ids")
+  d[, shares := quantity / market_size]
   d[, outside_share := 1 - sum(shares), by = market_ids]
   n0 <- nrow(d)
   cat("  collapsed to", uniqueN(d$market_ids), "markets,", n0, "rows\n")
@@ -161,6 +165,20 @@ if (fs::file_exists(pan)) {
   link <- merge(link, unique(vp[, c("nro_inscripcion", "anio", ..cols)]),
                 by.x = c("nro_inscripcion", "anio_int"), by.y = c("nro_inscripcion", "anio"),
                 all.x = TRUE)
+  # 08_station_variables.R looks for rivals among the outlets with an exact
+  # coordinate, within 50 km, and leaves the distance empty when there is none.
+  # For an outlet in that panel (it has an exact coordinate itself, so
+  # n_riv_5km is there) this is a distance of at least 50 km to the nearest
+  # such rival, not a missing one: top-code it, so isolated outlets enter the
+  # product average and their markets are not dropped for a missing instrument.
+  what <- c(d_rival_min = "no rival", d_rival_otra_marca = "no rival of another brand")
+  if ("n_riv_5km" %in% cols) {
+    for (v in intersect(names(what), cols)) {
+      cat(v, ": ", link[!is.na(n_riv_5km) & is.na(get(v)), .N], " rows with ", what[[v]],
+          " within 50 km, set to 50\n", sep = "")
+      link[!is.na(n_riv_5km) & is.na(get(v)), (v) := 50]
+    }
+  }
 }
 
 vars_est <- setdiff(names(link), c("nro_inscripcion", "provincia", "departamento",

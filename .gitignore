@@ -5,12 +5,18 @@
 Rplots.pdf
 .Ruserdata
 
+# Python
+__pycache__/
+*.pyc
+.venv/
+
 # data and generated files are kept outside the repository
 *.rds
 *.RData
 *.xlsx
 *.zip
 *.gz
+*.pkl
 
 # local working copies
 _original/
