@@ -76,6 +76,15 @@ class TestSample(unittest.TestCase):
         with self.assertRaises(ValueError):
             dd.check_shares(d)
 
+    def test_government_period(self):
+        q = pd.Series(["2004T4", "2012T1", "2012T2", "2019T2", "2019T3", "2019T4",
+                       "2023T4", "2024T1"])
+        got = dd.government_period(q).tolist()
+        p = dd.PERIOD_LABELS
+        # April 2012 is in the first period, May and June in the second; August
+        # to November 2019 is a period of its own and takes two quarters
+        self.assertEqual(got, [p[0], p[0], p[1], p[2], p[3], p[3], p[4], p[5]])
+
 
 class TestFirstStage(unittest.TestCase):
 

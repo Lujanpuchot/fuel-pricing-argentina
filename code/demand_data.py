@@ -18,6 +18,17 @@ REQUIRED = [
     "outlets", "provincia", "trimestre",
 ]
 
+# Government periods of docs/analysis_plan.md, by first and last month.
+PERIODS = [
+    ("2004-12", "2012-04"),
+    ("2012-05", "2015-12"),
+    ("2016-01", "2019-07"),
+    ("2019-08", "2019-11"),
+    ("2019-12", "2023-11"),
+    ("2023-12", "2024-12"),
+]
+PERIOD_LABELS = [f"{a} to {b}" for a, b in PERIODS]
+
 
 # Paths -----------------------------------------------------------------------
 
@@ -110,6 +121,21 @@ def sample_markets(products: pd.DataFrame, n: int | None, seed: int) -> pd.DataF
         return products
     keep = np.random.default_rng(seed).choice(markets, size=n, replace=False)
     return products[products["market_ids"].isin(keep)].copy()
+
+
+def government_period(trimestre: pd.Series) -> pd.Series:
+    """The government period of each quarter ("2010T3").
+
+    A quarter goes to the period that holds its middle month, which is the
+    period that holds most of it. The sample starts in the fourth quarter of
+    2004, before the first period does, and that quarter goes to the first.
+    """
+    year = trimestre.str[:4].astype(int)
+    middle = 3 * trimestre.str[-1].astype(int) - 1
+    month = pd.PeriodIndex.from_fields(year=year, month=middle, freq="M")
+    starts = pd.PeriodIndex([a for a, _ in PERIODS], freq="M")
+    i = np.clip(starts.searchsorted(month, side="right") - 1, 0, None)
+    return pd.Series(np.array(PERIOD_LABELS)[i], index=trimestre.index)
 
 
 def check_shares(products: pd.DataFrame) -> None:

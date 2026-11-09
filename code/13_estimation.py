@@ -1,6 +1,7 @@
 """Demand for gasoline (or diesel): random-coefficients logit in PyBLP.
 
-Reads the product-market file written by 12_estimation_sample.R and writes the
+Reads the product-market file written by 12_estimation_sample.R, and the
+refinery shock written by refinery_shock.py when it is there, and writes the
 demand estimates and, for the supply step, the Bertrand markup of every product
 in every market.
 
@@ -98,6 +99,8 @@ def parse_args(argv=None):
     p.add_argument("--system", choices=["nafta", "gasoil"], default="nafta")
     p.add_argument("--input", type=Path,
                    help="estimation sample (default: <interim>/estimation_sample_<system>.csv)")
+    p.add_argument("--shock", type=Path,
+                   help="refinery shock (default: <interim>/refinery_shock_<system>.csv)")
     p.add_argument("--out", type=Path, help="output folder (default: <interim>/blp_<system>)")
     p.add_argument("--markets", type=int, help="estimate on a random subsample of markets")
     p.add_argument("--seed", type=int, default=1)
@@ -133,6 +136,21 @@ def prepare(args, interim: Path) -> tuple[pd.DataFrame, dict]:
         products, report["markets_without_spatial"] = dd.complete_markets(products, SPATIAL)
         log.info("spatial instruments: %d markets dropped", report["markets_without_spatial"])
 
+    # The price instrument. Refinery runs start in 2010 and the sample starts
+    # there too when the shock is used. It is merged before --markets draws
+    # its subsample, so that the draw is from the markets that can be used.
+    shock_file = args.shock or interim / f"refinery_shock_{args.system}.csv"
+    if shock_file.exists():
+        shock = pd.read_csv(shock_file, encoding="utf-8-sig", usecols=["market_ids", "refinery_shock"])
+        products = products.merge(shock, on="market_ids", how="left", validate="m:1")
+        missing = products["refinery_shock"].isna()
+        report["markets_without_shock"] = int(products.loc[missing, "market_ids"].nunique())
+        products = products[~missing].copy()
+        log.info("refinery shock: %d markets without it dropped", report["markets_without_shock"])
+    else:
+        log.warning("%s not found: price rests on the rival and spatial instruments, "
+                    "which identify substitution better than the price level", shock_file.name)
+
     products = dd.sample_markets(products, args.markets, args.seed)
     dd.check_shares(products)
 
@@ -142,29 +160,20 @@ def prepare(args, interim: Path) -> tuple[pd.DataFrame, dict]:
     return products, report
 
 
-def add_instruments(products: pd.DataFrame, interim: Path, system: str,
-                    spatial: bool) -> tuple[pd.DataFrame, list[str]]:
+def add_instruments(products: pd.DataFrame, spatial: bool) -> tuple[pd.DataFrame, list[str]]:
     """Excluded instruments, stored as demand_instruments0, 1, ... for PyBLP.
 
     Not used, for the reasons in docs/analysis_plan.md: prices in other
     markets, wages, wholesale prices and import parity. Distance to the nearest
     refinery is not used either: remote markets are also poorer and smaller,
-    so it shifts demand as well as cost.
+    so it shifts demand as well as cost. The refinery shock uses that distance
+    only to weight deviations of runs from normal, which average zero in every
+    market.
     """
     blocks, names = [], []
-
-    # The price instrument: refinery throughput shocks weighted by inverse
-    # distance. It starts in 2010, so with it the sample starts in 2010 too.
-    shock_file = interim / f"refinery_shock_{system}.csv"
-    if shock_file.exists():
-        shock = pd.read_csv(shock_file, encoding="utf-8-sig")[["market_ids", "refinery_shock"]]
-        products = products.merge(shock, on="market_ids", how="left", validate="m:1")
-        products = products[products["refinery_shock"].notna()].reset_index(drop=True)
+    if "refinery_shock" in products:
         blocks.append(products[["refinery_shock"]].to_numpy(float))
         names.append("refinery_shock")
-    else:
-        log.warning("%s not found: price rests on the rival and spatial instruments, "
-                    "which identify substitution better than the price level", shock_file.name)
 
     blocks.append(products[COUNTS].to_numpy(float))
     names += COUNTS
@@ -189,6 +198,30 @@ def add_instruments(products: pd.DataFrame, interim: Path, system: str,
     for i in range(z.shape[1]):
         products[f"demand_instruments{i}"] = z[:, i]
     return products, names
+
+
+def price_instrument_test(products: pd.DataFrame) -> dict:
+    """The test the analysis plan sets for the refinery shock.
+
+    The shock alone, with the controls and fixed effects of the demand model,
+    must have an effective first-stage F above 10 and a negative coefficient,
+    in the pooled sample and in every government period. If it fails, the
+    plan declares the instrument question open.
+    """
+    def one(d):
+        fs = dd.first_stage(d, "prices", ["outlets"], ["refinery_shock"],
+                            absorb=["product_ids", "trimestre"], cluster="clustering_ids")
+        b = fs["coefficients"].get("refinery_shock", math.nan)
+        return {"markets": int(d["market_ids"].nunique()), "clusters": fs["clusters"],
+                "coefficient": b, "se": fs["standard_errors"].get("refinery_shock", math.nan),
+                "effective_f": fs["effective_f"], "passes": bool(fs["effective_f"] > 10 and b < 0)}
+
+    period = dd.government_period(products["trimestre"])
+    out = {"pooled": one(products)}
+    for p in dd.PERIOD_LABELS:
+        if (period == p).any():
+            out[p] = one(products[period == p])
+    return {"by_sample": out, "passes": all(r["passes"] for r in out.values())}
 
 
 # Estimation ----------------------------------------------------------------------
@@ -308,7 +341,7 @@ def main(argv=None) -> None:
     out.mkdir(parents=True, exist_ok=True)
 
     products, report = prepare(args, interim)
-    products, instruments = add_instruments(products, interim, args.system, not args.no_spatial)
+    products, instruments = add_instruments(products, not args.no_spatial)
     report.update(markets=int(products["market_ids"].nunique()), rows=len(products),
                   firms=int(products["firm_ids"].nunique()),
                   products=int(products["product_ids"].nunique()))
@@ -323,6 +356,15 @@ def main(argv=None) -> None:
     first["instruments_dropped"] = [names[k] for k in first["instruments_dropped"]]
     log.info("first stage: effective F %.1f over %d instruments",
              first["effective_f"], first["instruments_used"])
+
+    shock_test = price_instrument_test(products) if "refinery_shock" in instruments else None
+    if shock_test:
+        for name, r in shock_test["by_sample"].items():
+            log.info("refinery shock, %s: %d markets, coefficient %.3g (%.3g), effective F %.1f",
+                     name, r["markets"], r["coefficient"], r["se"], r["effective_f"])
+        if not shock_test["passes"]:
+            log.warning("the refinery shock fails the test of the analysis plan "
+                        "(effective F above 10 and a negative sign, pooled and by period)")
 
     parallel = pyblp.parallel(args.processes) if args.processes > 1 else contextlib.nullcontext()
     with parallel:
@@ -366,6 +408,7 @@ def main(argv=None) -> None:
         "price_units": f"thousands of {args.base} pesos per litre, net of taxes",
         "instruments": instruments,
         "first_stage": first,
+        "refinery_shock_test": shock_test,
         "logit": {
             "price_coefficient": float(logit.beta[0, 0]),
             "median_own_elasticity": float(np.median(logit_own)),
