@@ -87,6 +87,7 @@ code/
   10_descriptives.R           tables and figures
   11_demand_sample.R          the product-market file the demand model needs
   12_estimation_sample.R      joins the market and station variables onto it
+  refinery_shock.py           the price instrument, from refinery runs and distance
   13_estimation.py            demand in PyBLP, and the markups the supply step needs
   demand_data.py              sample preparation and first stage for 13_estimation.py
   figure_readme.R             the figures on the front page, in English
@@ -97,7 +98,7 @@ docs/
   analysis_plan.md
   open_issues.md
   figures/
-tests/                        tests of demand_data.py
+tests/                        tests of demand_data.py and refinery_shock.py
 requirements.txt              the Python packages the estimation needs
 ```
 
@@ -164,10 +165,11 @@ The demand estimation runs in Python 3.10 or later, on the file `12_estimation_s
 
 ```
 pip install -r requirements.txt
+python code/refinery_shock.py
 python code/13_estimation.py --markets 500
 ```
 
-`--markets` estimates on a random subsample of markets. The full sample takes hours, so that is the way to try a change first. `python code/13_estimation.py --help` lists the other options, and `python -m unittest discover tests` runs the tests of the data preparation, which need neither PyBLP nor the data.
+`refinery_shock.py` builds the price instrument; without it the estimation still runs, on the other instruments and from 2004. `--markets` estimates on a random subsample of markets. The full sample takes hours, so that is the way to try a change first. `python code/13_estimation.py --help` lists the other options, and `python -m unittest discover tests` runs the tests of the data preparation and of the instrument, which need neither PyBLP nor the data.
 
 How far this goes without my working folder: scripts 1 to 6 need only the six raw files, which are public, and rebuild the analysis panel from scratch. Script 7 needs those plus the two reference tables in `data/`, which are included. Scripts 8 to 10 read a handful of tables that were assembled by hand from public sources and are not redistributed here; [data/](data/) lists them and says what each one is for. Two of them have fallbacks that let the script finish with a substituted value instead of stopping, and the substitution is recorded in the output.
 
@@ -177,7 +179,9 @@ Variable names follow the source data and are in Spanish. Comments are in Englis
 
 The panel, the geocoding, the market covariates and the descriptive and event evidence are done, and this repository is that work. The estimation sample is done too: `11_demand_sample.R` assembles the product-market file and `12_estimation_sample.R` joins the market and station variables onto it, 214,463 products over 34,484 gasoline markets.
 
-Demand is what I am estimating now. `13_estimation.py` fits an IV logit as a benchmark and the random-coefficients model from several starting values, optionally re-solved with approximate optimal instruments, and writes the markups the supply side needs together with the diagnostics: first-stage strength, convergence and elasticities. It runs end to end on a random subsample of 500 markets and has not been run on the full sample yet. The price instrument is still open: the refinery supply shock is not built, and without it the price coefficient leans on rival counts and differentiation instruments, which identify substitution better than the level of the price response. The supply step, which compares these markups with margins over the cost built in `09_market_data.R`, is not in this repository yet.
+Demand is what I am estimating now. `13_estimation.py` fits an IV logit as a benchmark and the random-coefficients model from several starting values, optionally re-solved with approximate optimal instruments, and writes the markups the supply side needs together with the diagnostics: first-stage strength, convergence and elasticities. Firms are the companies that own the brands, so a chain that was rebranded is one firm under both flags. It runs end to end on a random subsample of 500 markets; the random-coefficients model has not been run on the full sample yet.
+
+The price instrument is still open. `refinery_shock.py` builds the refinery supply shock of the analysis plan, and the shock fails the test the plan sets for it: on its own, its effective first-stage F is 1.8 in the pooled 2010–2024 sample and between 0.03 and 7.4 by government period, with the expected negative sign in three of the six. The two strongest periods, 2016–2019 and 2024, are the two in which the plan allows for months of free prices. With every instrument, the IV logit on the full sample still gives a price coefficient of the wrong sign (4.5, standard error 1.0), so the markups cannot be used yet. The supply step, which compares these markups with margins over the cost built in `09_market_data.R`, is not in this repository yet.
 
 Six decisions about the data are still open and are listed in [docs/open_issues.md](docs/open_issues.md), with the evidence behind each one. The one that blocks the quantity side is the group of outlets that report volume in litres. Since market size is taken from the same quarter of other years, those outlets and the occasional spikes show up as markets that sold more than their size, and 993 of 35,652 markets are dropped for that until the rescaling is decided.
 
