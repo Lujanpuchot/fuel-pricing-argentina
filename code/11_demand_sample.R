@@ -3,9 +3,7 @@
 # instruments that go with it. The estimation itself runs in PyBLP; this script
 # produces its input and nothing else.
 #
-# Input:  the analysis panel with the department column, the market covariates
-#         written by 09_market_data.R, and the station variables of
-#         08_station_variables.R
+# Input:  the analysis panel with the department column
 # Output: demanda_blp_sample_<system>.csv in DIR_INTERIM, one row per market
 #         and product
 #
@@ -32,7 +30,6 @@ suppressPackageStartupMessages({
 source("code/00_config.R")
 
 DIR_INT <- DIR_INTERIM
-DIR_COV <- DIR_COVAR
 
 # Settings ----
 
@@ -152,18 +149,10 @@ pm[, n_productos_mercado := .N, by = mercado]
 pm[, n_otras_marcas := uniqueN(marca) - 1, by = mercado]
 pm[, n_mismo_grado := .N - 1, by = .(mercado, producto)]
 
-# 4.2 The refinery shock, from the distance to each refinery and the runs
-# reported by the Energy Secretariat. Both pieces exist: d_refineria_km in
-# variables_espaciales_estacion.csv, and covar_sesco_refinacion.csv. The
-# weights are not written yet; 13_estimation.py picks the shock up from
-# refinery_shock_<system>.csv when the file exists.
-FILE_REF <- fs::path(DIR_INT, "variables_espaciales_estacion.csv")
-FILE_RUN <- fs::path(DIR_COV, "covar_sesco_refinacion.csv")
-if (fs::file_exists(FILE_REF) && fs::file_exists(FILE_RUN)) {
-  cat("refinery distance and refinery runs found; the shock weights are not built yet\n")
-} else {
-  cat("refinery distance or refinery runs missing: the shock cannot be built here\n")
-}
+# 4.2 The refinery shock is built by refinery_shock.py, on the markets of the
+# file 12_estimation_sample.R writes, from the runs in covar_sesco_refinacion.csv
+# and the department centroids. 13_estimation.py reads it from
+# refinery_shock_<system>.csv.
 
 # 5. Save ----
 
