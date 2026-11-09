@@ -29,6 +29,11 @@ PERIODS = [
 ]
 PERIOD_LABELS = [f"{a} to {b}" for a, b in PERIODS]
 
+# Petrobras's refinery and outlets passed to Trafigura, which rebranded them
+# Puma, in May 2018: the month the SESCO refinery table changes the operator of
+# Bahía Blanca.
+PUMA_FROM = "2018T2"
+
 
 # Paths -----------------------------------------------------------------------
 
@@ -136,6 +141,26 @@ def government_period(trimestre: pd.Series) -> pd.Series:
     starts = pd.PeriodIndex([a for a, _ in PERIODS], freq="M")
     i = np.clip(starts.searchsorted(month, side="right") - 1, 0, None)
     return pd.Series(np.array(PERIOD_LABELS)[i], index=trimestre.index)
+
+
+def owners(products: pd.DataFrame) -> pd.Series:
+    """The company behind each brand, which is who sets prices in Bertrand.
+
+    Two chains were sold and rebranded during the sample, and an outlet can
+    keep its old bandera in the data for years after: Esso's became Axion, and
+    Petrobras's, with Pampa Energía as owner in between, became Puma. Taken as
+    firms, the two halves of a chain would price against each other in the
+    markets where both flags appear. Before PUMA_FROM, the few outlets already
+    flagged Puma are a firm of their own. Every other brand is its own owner,
+    as are the unbranded outlets pooled in BLANCA.
+    """
+    flag = products["firm_ids"].str.upper()
+    owner = products["firm_ids"].copy()
+    owner[flag.str.contains("ESSO|AXION")] = "AXION"
+    petrobras = flag.str.contains("PETROBRAS|PAMPA")
+    owner[petrobras] = "PETROBRAS"
+    owner[(petrobras | flag.str.contains("PUMA")) & (products["trimestre"] >= PUMA_FROM)] = "PUMA"
+    return owner
 
 
 def check_shares(products: pd.DataFrame) -> None:

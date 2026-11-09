@@ -8,6 +8,7 @@ in every market.
     python code/13_estimation.py                    # gasoline, every market
     python code/13_estimation.py --markets 500      # a random 500, to try a change
     python code/13_estimation.py --optimal-iv       # re-solve with optimal instruments
+    python code/13_estimation.py --firms brand      # each brand prices on its own
     python code/13_estimation.py --system gasoil
 
 Output, in <interim>/blp_<system>/ unless --out says otherwise:
@@ -102,6 +103,8 @@ def parse_args(argv=None):
     p.add_argument("--shock", type=Path,
                    help="refinery shock (default: <interim>/refinery_shock_<system>.csv)")
     p.add_argument("--out", type=Path, help="output folder (default: <interim>/blp_<system>)")
+    p.add_argument("--firms", choices=["owner", "brand"], default="owner",
+                   help="who sets the prices of a brand: the company that owns it, or the brand itself")
     p.add_argument("--markets", type=int, help="estimate on a random subsample of markets")
     p.add_argument("--seed", type=int, default=1)
     p.add_argument("--base", default="2024T4", help="quarter whose pesos prices are expressed in")
@@ -153,6 +156,14 @@ def prepare(args, interim: Path) -> tuple[pd.DataFrame, dict]:
 
     products = dd.sample_markets(products, args.markets, args.seed)
     dd.check_shares(products)
+
+    report["firm_ids"] = args.firms
+    if args.firms == "owner":
+        owner = dd.owners(products)
+        by_market = products.groupby("market_ids")["firm_ids"].nunique()
+        report["markets_with_brands_merged"] = int(
+            (by_market > owner.groupby(products["market_ids"]).nunique()).sum())
+        products["firm_ids"] = owner
 
     products["premium"] = products["grade"].str.contains("premium|Grado 3", case=False).astype(int)
     products["clustering_ids"] = products["provincia"] + "|" + products["trimestre"]

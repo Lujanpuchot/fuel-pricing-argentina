@@ -85,6 +85,17 @@ class TestSample(unittest.TestCase):
         # to November 2019 is a period of its own and takes two quarters
         self.assertEqual(got, [p[0], p[0], p[1], p[2], p[3], p[3], p[4], p[5]])
 
+    def test_owners(self):
+        d = pd.DataFrame({
+            "firm_ids": ["ESSO PETROLERA ARGENTINA S.R.L", "AXION", "PETROBRAS", "PUMA",
+                         "PETROBRAS", "PUMA", "Pampa Energia", "SHELL C.A.P.S.A.", "BLANCA"],
+            "trimestre": ["2016T1", "2016T1", "2017T4", "2017T4",
+                          "2019T1", "2019T1", "2017T2", "2019T1", "2019T1"],
+        })
+        self.assertEqual(dd.owners(d).tolist(),
+                         ["AXION", "AXION", "PETROBRAS", "PUMA",
+                          "PUMA", "PUMA", "PETROBRAS", "SHELL C.A.P.S.A.", "BLANCA"])
+
 
 class TestFirstStage(unittest.TestCase):
 
